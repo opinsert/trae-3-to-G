@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.gcode-textarea {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.code-highlight {
+  background-color: #fef08a;
+}
+
+.step-highlight {
+  background-color: #dbeafe;
+}
