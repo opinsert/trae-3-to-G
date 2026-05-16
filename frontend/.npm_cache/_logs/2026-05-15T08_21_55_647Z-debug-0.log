@@ -1,0 +1,87 @@
+0 verbose cli E:\software\Node\node.exe E:\software\Node\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.12.1
+2 info using node@v24.15.0
+3 silly config load:file:E:\software\Node\node_modules\npm\npmrc
+4 silly config load:file:E:\some_work_project\cursor-trae\trae-3 to g\frontend\.npmrc
+5 silly config load:file:C:\Users\21242\.npmrc
+6 silly config load:file:E:\software\Node\node_global\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install" "--cache" ".npm_cache"
+9 verbose logfile logs-max:10 dir:E:\some_work_project\cursor-trae\trae-3 to g\frontend\.npm_cache\_logs\2026-05-15T08_21_55_647Z-
+10 verbose logfile E:\some_work_project\cursor-trae\trae-3 to g\frontend\.npm_cache\_logs\2026-05-15T08_21_55_647Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 silly idealTree buildDeps
+14 silly fetch manifest vue@^3.4.21
+15 silly packumentCache full:https://registry.npmjs.org/vue cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/npm 1663ms
+17 http fetch GET 200 https://registry.npmjs.org/vue 2728ms (cache miss)
+18 silly packumentCache full:https://registry.npmjs.org/vue set size:undefined disposed:false
+19 silly fetch manifest typescript@*
+20 silly packumentCache full:https://registry.npmjs.org/typescript cache-miss
+21 http fetch GET 200 https://registry.npmjs.org/typescript 874ms (cache miss)
+22 silly packumentCache full:https://registry.npmjs.org/typescript set size:undefined disposed:false
+23 silly fetch manifest axios@^1.6.8
+24 silly packumentCache full:https://registry.npmjs.org/axios cache-miss
+25 http fetch GET 200 https://registry.npmjs.org/axios 475ms (cache miss)
+26 silly packumentCache full:https://registry.npmjs.org/axios set size:undefined disposed:false
+27 silly fetch manifest lucide-vue-next@^0.2.0
+28 silly packumentCache full:https://registry.npmjs.org/lucide-vue-next cache-miss
+29 http fetch GET 200 https://registry.npmjs.org/lucide-vue-next 360ms (cache miss)
+30 silly packumentCache full:https://registry.npmjs.org/lucide-vue-next set size:undefined disposed:false
+31 silly fetch manifest @vitejs/plugin-vue@^5.0.4
+32 silly packumentCache full:https://registry.npmjs.org/@vitejs%2fplugin-vue cache-miss
+33 http fetch GET 200 https://registry.npmjs.org/@vitejs%2fplugin-vue 394ms (cache miss)
+34 silly packumentCache full:https://registry.npmjs.org/@vitejs%2fplugin-vue set size:undefined disposed:false
+35 silly fetch manifest vite@^6.5.0
+36 silly packumentCache full:https://registry.npmjs.org/vite cache-miss
+37 http fetch GET 200 https://registry.npmjs.org/vite 1612ms (cache miss)
+38 silly packumentCache full:https://registry.npmjs.org/vite set size:undefined disposed:false
+39 silly fetch manifest vite@^5.0.0 || ^6.0.0
+40 silly packumentCache full:https://registry.npmjs.org/vite cache-miss
+41 http cache https://registry.npmjs.org/vite 108ms (cache hit)
+42 silly packumentCache full:https://registry.npmjs.org/vite set size:38838042 disposed:false
+43 verbose stack Error: unable to resolve dependency tree
+43 verbose stack     at #failPeerConflict (E:\software\Node\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1415:25)
+43 verbose stack     at #loadPeerSet (E:\software\Node\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:1381:33)
+43 verbose stack     at async #buildDepStep (E:\software\Node\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:917:11)
+43 verbose stack     at async Arborist.buildIdealTree (E:\software\Node\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:170:7)
+43 verbose stack     at async Promise.all (index 1)
+43 verbose stack     at async Arborist.reify (E:\software\Node\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:111:5)
+43 verbose stack     at async Install.exec (E:\software\Node\node_modules\npm\lib\commands\install.js:146:5)
+43 verbose stack     at async Npm.exec (E:\software\Node\node_modules\npm\lib\npm.js:193:9)
+43 verbose stack     at async module.exports (E:\software\Node\node_modules\npm\lib\cli\entry.js:67:5)
+44 error code ERESOLVE
+45 error ERESOLVE unable to resolve dependency tree
+46 error
+47 error While resolving: gcode-converter-frontend@1.0.0
+47 error Found: vite@undefined[2m[22m
+47 error [2mnode_modules/vite[22m
+47 error   [34mdev[39m vite@"^6.5.0" from the root project
+47 error
+47 error Could not resolve dependency:
+47 error [95mpeer[39m vite@"^5.0.0 || ^6.0.0" from @vitejs/plugin-vue@5.2.4[2m[22m
+47 error [2mnode_modules/@vitejs/plugin-vue[22m
+47 error   [34mdev[39m @vitejs/plugin-vue@"^5.0.4" from the root project
+47 error
+47 error Fix the upstream dependency conflict, or retry this command with --force or --legacy-peer-deps to accept an incorrect (and potentially broken) dependency resolution.
+48 error
+48 error
+48 error For a full report see:
+48 error E:\some_work_project\cursor-trae\trae-3 to g\frontend\.npm_cache\_logs\2026-05-15T08_21_55_647Z-eresolve-report.txt
+49 silly unfinished npm timer reify 1778833317125
+50 silly unfinished npm timer reify:loadTrees 1778833317127
+51 silly unfinished npm timer idealTree:buildDeps 1778833317140
+52 silly unfinished npm timer idealTree:#root 1778833317141
+53 verbose cwd E:\some_work_project\cursor-trae\trae-3 to g\frontend
+54 verbose os Windows_NT 10.0.22631
+55 verbose node v24.15.0
+56 verbose npm  v11.12.1
+57 notice
+57 notice New [33mminor[39m version of npm available! [33m11.12.1[39m -> [34m11.14.1[39m
+57 notice Changelog: [34mhttps://github.com/npm/cli/releases/tag/v11.14.1[39m
+57 notice To update run: [4mnpm install -g npm@11.14.1[24m
+57 notice  { force: true, Symbol(proc-log.meta): true }
+58 verbose exit 1
+59 verbose code 1
+60 error A complete log of this run can be found in: E:\some_work_project\cursor-trae\trae-3 to g\frontend\.npm_cache\_logs\2026-05-15T08_21_55_647Z-debug-0.log
