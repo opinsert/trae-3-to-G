@@ -18,23 +18,28 @@ class DrawingConvertRequest(BaseModel):
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_drawing(request: DrawingConvertRequest):
     try:
+        print(f"收到转换请求: {request}")
+        
         params = {
-            'product_name': request.process_card.product_name,
-            'process_name': request.process_card.process_name,
-            'process_number': request.process_card.process_number,
-            'version': request.process_card.version,
-            'equipment': request.process_card.equipment,
-            'control_system': request.process_card.control_system,
-            'fixture': request.process_card.fixture,
-            'material': request.process_card.material,
-            'tool_name': request.process_card.tool_info.name,
-            'tool_length': request.process_card.tool_info.length,
-            'tool_diameter': request.process_card.tool_info.diameter,
-            'operations': request.operations
+            'product_name': request.process_card.product_name or '',
+            'process_name': request.process_card.process_name or '',
+            'process_number': request.process_card.process_number or '',
+            'version': request.process_card.version or '',
+            'equipment': request.process_card.equipment or '',
+            'control_system': request.process_card.control_system or '',
+            'fixture': request.process_card.fixture or '',
+            'material': request.process_card.material or '',
+            'tool_name': request.process_card.tool_info.name if request.process_card.tool_info else '',
+            'tool_length': request.process_card.tool_info.length if request.process_card.tool_info else 0,
+            'tool_diameter': request.process_card.tool_info.diameter if request.process_card.tool_info else 0,
+            'operations': request.operations or []
         }
+        
+        print(f"参数转换完成: {params}")
         
         result, missing = validate_and_convert(params)
         if missing:
+            print(f"缺失字段: {missing}")
             return ConvertResponse(
                 success=False,
                 message="参数不完整",
@@ -42,9 +47,13 @@ async def convert_drawing(request: DrawingConvertRequest):
             )
         
         process_card, operations = result
+        print(f"ProcessCard: {process_card}")
+        print(f"Operations: {operations}")
+        
         gcode = generate_gcode(process_card, operations)
         validation = validate_gcode(gcode)
         
+        print("转换成功")
         return ConvertResponse(
             success=True,
             message="转换成功",
@@ -56,6 +65,7 @@ async def convert_drawing(request: DrawingConvertRequest):
             )
         )
     except Exception as e:
+        print(f"转换异常: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/ocr-extract")

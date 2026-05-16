@@ -40,10 +40,6 @@
         v-if="currentTab === 'stl'"
         @convert="handleConvert"
       />
-      <ExampleSelector
-        v-if="currentTab === 'examples'"
-        @select="handleExampleSelect"
-      />
       <AdvanceView
         v-if="currentTab === 'advance'"
         @convert="handleConvert"
@@ -71,7 +67,6 @@ import { ref } from 'vue'
 import NaturalLanguageInput from './components/NaturalLanguageInput.vue'
 import DrawingUpload from './components/DrawingUpload.vue'
 import StlUpload from './components/StlUpload.vue'
-import ExampleSelector from './components/ExampleSelector.vue'
 import AdvanceView from './views/AdvanceView.vue'
 import GCodeModal from './components/GCodeModal.vue'
 import ProcessCardModal from './components/ProcessCardModal.vue'
@@ -80,7 +75,6 @@ const tabs = [
   { id: 'natural', name: '自然语言转换' },
   { id: 'drawing', name: '工序图转换' },
   { id: 'stl', name: 'STL文件转换' },
-  { id: 'examples', name: '工序卡示例' },
   { id: 'advance', name: '进阶功能' }
 ]
 
@@ -90,19 +84,14 @@ const showGCodeModal = ref(false)
 const showProcessCardModal = ref(false)
 
 const handleConvert = (data) => {
-  convertedData.value = data
-  showGCodeModal.value = true
-  showProcessCardModal.value = true
-}
-
-const handleExampleSelect = (example) => {
-  convertedData.value = {
-    process_card: example.card_data,
-    operations: example.operations_data,
-    gcode: example.gcode,
-    validation: { valid: true, errors: [], warnings: [] }
+  console.log('收到转换数据:', data)
+  if (data) {
+    convertedData.value = data
+    showGCodeModal.value = true
+    showProcessCardModal.value = true
+  } else {
+    console.error('没有收到转换数据')
+    alert('转换失败：没有收到数据')
   }
-  showGCodeModal.value = true
-  showProcessCardModal.value = true
 }
 </script>
