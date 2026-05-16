@@ -11,7 +11,7 @@
       </div>
 
       <div class="flex-1 overflow-auto p-4 max-h-[60vh]">
-        <pre class="gcode-textarea whitespace-pre-wrap text-sm font-mono"><code>{{ gcode }}</code></pre>
+        <pre class="gcode-textarea whitespace-pre-wrap text-sm font-mono"><code>{{ gcode || '' }}</code></pre>
       </div>
 
       <div class="p-4 border-t bg-gray-50">
@@ -41,14 +41,14 @@
         <div class="flex items-center gap-4">
           <div :class="[
             'px-4 py-2 rounded-full text-sm font-medium',
-            validation.valid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+            validation?.valid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
           ]">
-            {{ validation.valid ? '✓ 验证通过' : '✗ 验证失败' }}
+            {{ validation?.valid ? '✓ 验证通过' : '✗ 验证失败' }}
           </div>
-          <div v-if="validation.errors.length > 0" class="text-red-600 text-sm">
+          <div v-if="validation?.errors?.length > 0" class="text-red-600 text-sm">
             发现 {{ validation.errors.length }} 个错误
           </div>
-          <div v-if="validation.warnings.length > 0" class="text-yellow-600 text-sm">
+          <div v-if="validation?.warnings?.length > 0" class="text-yellow-600 text-sm">
             发现 {{ validation.warnings.length }} 个警告
           </div>
         </div>

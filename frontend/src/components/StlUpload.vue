@@ -79,10 +79,12 @@
       </div>
     </div>
 
-    <div v-if="missingFields.length > 0" class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+    <div v-if="missingFields && missingFields.length > 0" class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
       <p class="text-yellow-800 font-medium">请补充以下缺失的参数：</p>
       <ul class="mt-2 space-y-1">
-        <li v-for="field in missingFields" :key="field" class="text-yellow-700">- {{ field }}</li>
+        <template v-for="(field, index) in (missingFields || [])" :key="index">
+          <li v-if="typeof field === 'string'" class="text-yellow-700">- {{ field }}</li>
+        </template>
       </ul>
     </div>
 

@@ -81,12 +81,17 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="op in operations" :key="op.sequence" class="border-t">
-                <td class="px-3 py-2">{{ op.sequence }}</td>
-                <td class="px-3 py-2">{{ op.content }}</td>
-                <td class="px-3 py-2">{{ op.parameters }}</td>
-                <td class="px-3 py-2">{{ op.equipment }}</td>
+              <tr v-if="!operations || operations.length === 0" class="border-t">
+                <td colspan="4" class="px-3 py-4 text-center text-gray-500">暂无操作步骤</td>
               </tr>
+              <template v-for="(op, index) in (operations || [])" :key="index">
+                <tr v-if="op && typeof op === 'object'" class="border-t">
+                  <td class="px-3 py-2">{{ typeof op.sequence === 'number' ? op.sequence : index + 1 }}</td>
+                  <td class="px-3 py-2">{{ typeof op.content === 'string' ? op.content : '' }}</td>
+                  <td class="px-3 py-2">{{ typeof op.parameters === 'string' ? op.parameters : '' }}</td>
+                  <td class="px-3 py-2">{{ typeof op.equipment === 'string' ? op.equipment : '' }}</td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>

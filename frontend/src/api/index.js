@@ -13,7 +13,7 @@ export const naturalLanguageApi = {
 }
 
 export const drawingApi = {
-  convert: (processCard, operations) => api.post('/drawing/convert', { processCard, operations }),
+  convert: (processCard, operations) => api.post('/drawing/convert', { process_card: processCard, operations }),
   ocrExtract: (image) => api.post('/drawing/ocr-extract', { image })
 }
 
