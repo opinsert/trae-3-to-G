@@ -4,7 +4,7 @@ const API_BASE_URL = '/api/v1'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000
+  timeout: 60000
 })
 
 export const naturalLanguageApi = {
@@ -13,7 +13,7 @@ export const naturalLanguageApi = {
 }
 
 export const drawingApi = {
-  convert: (processCard, operations) => api.post('/drawing/convert', { process_card: processCard, operations }),
+  convert: (processCard, steps) => api.post('/drawing/convert', { process_card: processCard, steps }),
   ocrExtract: (image) => api.post('/drawing/ocr-extract', { image })
 }
 
