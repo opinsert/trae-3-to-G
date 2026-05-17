@@ -48,3 +48,17 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+# Python pip cache
+.pip_cache/
+
+# NPM cache
+frontend/.npm_cache/
+
+# Test files
+test.jpg
+test_ocr.py
+工序图.jpg
+
+# OCR models (if not needed)
+# backend/models/
