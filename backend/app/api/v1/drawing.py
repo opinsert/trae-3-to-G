@@ -13,7 +13,7 @@ class DrawingRequest(BaseModel):
 
 class DrawingConvertRequest(BaseModel):
     process_card: ProcessCard
-    operations: list
+    steps: list
 
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_drawing(request: DrawingConvertRequest):
@@ -32,7 +32,7 @@ async def convert_drawing(request: DrawingConvertRequest):
             'tool_name': request.process_card.tool_info.name if request.process_card.tool_info else '',
             'tool_length': request.process_card.tool_info.length if request.process_card.tool_info else 0,
             'tool_diameter': request.process_card.tool_info.diameter if request.process_card.tool_info else 0,
-            'operations': request.operations or []
+            'operations': request.steps or []
         }
         
         print(f"参数转换完成: {params}")

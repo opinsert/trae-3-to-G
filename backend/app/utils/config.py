@@ -3,6 +3,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_api_url: str = "https://api.deepseek.com/v1/chat/completions"
+    baidu_app_id: str = ""
+    baidu_api_key: str = ""
+    baidu_secret_key: str = ""
     port: int = 8000
     app_name: str = "GCode Converter"
     app_version: str = "1.0.0"
