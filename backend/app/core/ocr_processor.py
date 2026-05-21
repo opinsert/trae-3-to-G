@@ -99,18 +99,24 @@ class OCRProcessor:
             parsed_result = text_parsed.copy()
             
             # 只有当表格解析有实际数据时才覆盖
+            new_fields = ['workshop', 'process_card_number', 'material_grade', 'blank_type', 
+                         'blank_size', 'blank_available_pieces', 'pieces_per_machine', 
+                         'equipment_model', 'equipment_no', 'simultaneous_pieces', 
+                         'fixture_no', 'cutting_fluid', 'station_tool_no', 
+                         'station_tool_name', 'preparation_time', 'unit_time', 'drawing_steps']
+            
             table_has_data = any([
                 table_parsed.get('process_number'),
                 table_parsed.get('material'),
                 table_parsed.get('equipment'),
                 table_parsed.get('control_system'),
                 len(table_parsed.get('steps', [])) > 0
-            ])
+            ] + [table_parsed.get(field) for field in new_fields])
             
             if table_has_data:
                 print('[后端-OCR] [百度OCR] 表格识别有数据，使用表格结果')
                 # 只更新表格有的字段
-                for key in ['process_number', 'material', 'equipment', 'control_system', 'steps']:
+                for key in ['process_number', 'material', 'equipment', 'control_system', 'steps'] + new_fields:
                     if table_parsed.get(key):
                         parsed_result[key] = table_parsed[key]
             else:
@@ -128,6 +134,14 @@ class OCRProcessor:
             print('[后端-OCR]  - 材料名称:', parsed_result.get('material', ''))
             print('[后端-OCR]  - 工序编号:', parsed_result.get('process_number', ''))
             print('[后端-OCR]  - 工步数量:', len(parsed_result.get('steps', [])))
+            print('[后端-OCR]  - DrawingStep数量:', len(parsed_result.get('drawing_steps', [])))
+            # 打印部分新字段
+            if parsed_result.get('workshop'):
+                print('[后端-OCR]  - 车间:', parsed_result.get('workshop'))
+            if parsed_result.get('material_grade'):
+                print('[后端-OCR]  - 材料牌号:', parsed_result.get('material_grade'))
+            if parsed_result.get('equipment_model'):
+                print('[后端-OCR]  - 设备型号:', parsed_result.get('equipment_model'))
             
             print('[后端-OCR] ============== OCR 识别成功 ==============\n')
             return parsed_result
@@ -160,7 +174,24 @@ class OCRProcessor:
             'tool_name': '',
             'tool_length': 0,
             'tool_diameter': 0,
-            'steps': []
+            'steps': [],
+            'workshop': '',
+            'process_card_number': '',
+            'material_grade': '',
+            'blank_type': '',
+            'blank_size': '',
+            'blank_available_pieces': '',
+            'pieces_per_machine': '',
+            'equipment_model': '',
+            'equipment_no': '',
+            'simultaneous_pieces': '',
+            'fixture_no': '',
+            'cutting_fluid': '',
+            'station_tool_no': '',
+            'station_tool_name': '',
+            'preparation_time': '',
+            'unit_time': '',
+            'drawing_steps': []
         }
         
         step_keywords = ['铣削', '车削', '钻孔', '攻丝', '铰孔', '镗孔', '磨削', '倒角', '开槽', '精铣', '粗铣']
@@ -168,6 +199,25 @@ class OCRProcessor:
         material_keywords = ['铸件', '钢', '铁', '铝', '铜', '合金', '不锈钢', '碳钢']
         control_system_keywords = ['Fanuc', 'fanuc', 'SIEMENS', 'Siemens', 'siemens', 'FANUC', 'CNC']
         tool_keywords = ['铣刀', '钻头', '丝锥', '铰刀', '镗刀', '砂轮', '刀片']
+        
+        new_field_patterns = {
+            'workshop': ['车间'],
+            'process_card_number': ['工序号'],
+            'material_grade': ['材料牌号', '材料号'],
+            'blank_type': ['毛坯种类'],
+            'blank_size': ['毛坯外形尺寸', '毛坯尺寸'],
+            'blank_available_pieces': ['毛坯还可制件数', '还可制件数'],
+            'pieces_per_machine': ['每台件数'],
+            'equipment_model': ['设备型号'],
+            'equipment_no': ['设备编号'],
+            'simultaneous_pieces': ['同时加工件数'],
+            'fixture_no': ['夹具编号'],
+            'cutting_fluid': ['切削液'],
+            'station_tool_no': ['工位器具编号'],
+            'station_tool_name': ['工位器具名称'],
+            'preparation_time': ['准终工时'],
+            'unit_time': ['单件工时']
+        }
         
         numbers = []
         texts = []
@@ -219,6 +269,15 @@ class OCRProcessor:
                         extracted['tool_name'] = kw
                         print(f'[后端-OCR] [解析] 字段[tool_name] = [{kw}]')
                         break
+        
+        for i, word in enumerate(all_words):
+            for field, keywords in new_field_patterns.items():
+                for kw in keywords:
+                    if kw in word and not extracted[field]:
+                        if i + 1 < len(all_words):
+                            value = all_words[i + 1].strip()
+                            extracted[field] = value
+                            print(f'[后端-OCR] [解析] 字段[{field}] = [{value}]')
         
         if numbers:
             extracted['process_number'] = numbers[0]
@@ -292,7 +351,24 @@ class OCRProcessor:
             'tool_name': '',
             'tool_length': 0,
             'tool_diameter': 0,
-            'steps': []
+            'steps': [],
+            'workshop': '',
+            'process_card_number': '',
+            'material_grade': '',
+            'blank_type': '',
+            'blank_size': '',
+            'blank_available_pieces': '',
+            'pieces_per_machine': '',
+            'equipment_model': '',
+            'equipment_no': '',
+            'simultaneous_pieces': '',
+            'fixture_no': '',
+            'cutting_fluid': '',
+            'station_tool_no': '',
+            'station_tool_name': '',
+            'preparation_time': '',
+            'unit_time': '',
+            'drawing_steps': []
         }
         
         # 打印表格识别完整结果（用于调试）
@@ -377,35 +453,51 @@ class OCRProcessor:
         # 将所有单元格文字合并成一行便于匹配
         combined_text = ' '.join(cell_texts)
         
-        # 关键词匹配
-        process_keywords = ['车间', '工序号', '工序名称', '材料号', '材料名称', '毛坯种类']
-        equipment_keywords = ['设备名称', '设备型号', '数控系统']
-        fixture_keywords = ['夹具名称', '夹具编号']
-        material_keywords = ['铸件', '钢', '铁', '铝', '合金']
+        # 标准工序卡字段映射（成对提取：第一列1和2是标签，列3和4是值）
+        field_mappings = {
+            'workshop': ['车间'],
+            'process_card_number': ['工序号'],
+            'process_name': ['工序名称'],
+            'material_grade': ['材料牌号', '材料号'],
+            'blank_type': ['毛坯种类'],
+            'blank_size': ['毛坯外形尺寸', '毛坯尺寸'],
+            'blank_available_pieces': ['毛坯还可制件数', '还可制件数'],
+            'pieces_per_machine': ['每台件数'],
+            'equipment': ['设备名称'],
+            'equipment_model': ['设备型号'],
+            'equipment_no': ['设备编号'],
+            'simultaneous_pieces': ['同时加工件数'],
+            'fixture_no': ['夹具编号'],
+            'fixture': ['夹具名称'],
+            'cutting_fluid': ['切削液'],
+            'station_tool_no': ['工位器具编号'],
+            'station_tool_name': ['工位器具名称'],
+            'preparation_time': ['准终工时'],
+            'unit_time': ['单件工时']
+        }
         
-        # 检查工序相关字段
+        # 成对提取（标准工序卡格式：标签和值成对出现）
+        for i in range(0, len(cell_texts) - 1, 2):
+            if i + 1 < len(cell_texts):
+                label = cell_texts[i].strip()
+                value = cell_texts[i + 1].strip()
+                if label and value:
+                    for field, keywords in field_mappings.items():
+                        for kw in keywords:
+                            if kw in label and not result.get(field):
+                                result[field] = value
+                                print(f'[后端-OCR] [表格解析] 找到{kw}: {value}')
+        
+        # 单列检查（向后看）
         for i, text in enumerate(cell_texts):
-            # 工序号
-            if '工序号' in text and i + 1 < len(cell_texts):
-                result['process_number'] = cell_texts[i + 1].strip()
-                print(f'[后端-OCR] [表格解析] 找到工序号: {result["process_number"]}')
-            
-            # 材料号
-            if '材料号' in text and i + 1 < len(cell_texts):
-                result['material'] = cell_texts[i + 1].strip()
-                print(f'[后端-OCR] [表格解析] 找到材料号: {result["material"]}')
-            
-            # 设备名称
-            if '设备名称' in text and i + 1 < len(cell_texts):
-                result['equipment'] = cell_texts[i + 1].strip()
-                print(f'[后端-OCR] [表格解析] 找到设备名称: {result["equipment"]}')
-            
-            # 设备型号
-            if '设备型号' in text and i + 1 < len(cell_texts):
-                result['control_system'] = cell_texts[i + 1].strip()
-                print(f'[后端-OCR] [表格解析] 找到设备型号: {result["control_system"]}')
+            for field, keywords in field_mappings.items():
+                for kw in keywords:
+                    if kw in text and i + 1 < len(cell_texts) and not result.get(field):
+                        value = cell_texts[i + 1].strip()
+                        result[field] = value
+                        print(f'[后端-OCR] [表格解析] 找到{kw}: {value}')
         
-        # 检查工步（表格中第一个单元格是数字的行）
+        # 检查DrawingStep工步（表格中包含工步相关列）
         if cell_texts and len(cell_texts) >= 2:
             first_cell = cell_texts[0].strip()
             
@@ -414,24 +506,94 @@ class OCRProcessor:
                 # 提取序号
                 sequence = int(''.join([c for c in first_cell if c.isdigit()]))
                 
-                # 工步内容通常在第二列
-                content = cell_texts[1].strip() if len(cell_texts) > 1 else ''
-                
-                # 工艺装备可能在第三列
-                equipment = cell_texts[2].strip() if len(cell_texts) > 2 else ''
-                
                 # 避免重复添加相同的工步
                 existing_sequences = [s.get('sequence') for s in result.get('steps', [])]
                 if sequence not in existing_sequences:
+                    # 工步内容通常在第二列
+                    content = cell_texts[1].strip() if len(cell_texts) > 1 else ''
+                    
+                    # 工艺装备可能在第三列
+                    tooling = cell_texts[2].strip() if len(cell_texts) > 2 else ''
+                    
+                    # 提取切削参数
+                    spindle_speed = None
+                    if len(cell_texts) > 3 and cell_texts[3].strip():
+                        try:
+                            spindle_speed = float(cell_texts[3].strip())
+                        except:
+                            pass
+                    
+                    cutting_speed = None
+                    if len(cell_texts) > 4 and cell_texts[4].strip():
+                        try:
+                            cutting_speed = float(cell_texts[4].strip())
+                        except:
+                            pass
+                    
+                    feed_rate = None
+                    if len(cell_texts) > 5 and cell_texts[5].strip():
+                        try:
+                            feed_rate = float(cell_texts[5].strip())
+                        except:
+                            pass
+                    
+                    depth_of_cut = None
+                    if len(cell_texts) > 6 and cell_texts[6].strip():
+                        try:
+                            depth_of_cut = float(cell_texts[6].strip())
+                        except:
+                            pass
+                    
+                    feed_count = None
+                    if len(cell_texts) > 7 and cell_texts[7].strip():
+                        try:
+                            feed_count = int(cell_texts[7].strip())
+                        except:
+                            pass
+                    
+                    machine_time = None
+                    if len(cell_texts) > 8 and cell_texts[8].strip():
+                        try:
+                            machine_time = float(cell_texts[8].strip())
+                        except:
+                            pass
+                    
+                    auxiliary_time = None
+                    if len(cell_texts) > 9 and cell_texts[9].strip():
+                        try:
+                            auxiliary_time = float(cell_texts[9].strip())
+                        except:
+                            pass
+                    
+                    # 添加到steps（兼容旧格式）
                     result['steps'].append({
                         'sequence': sequence,
                         'content': content,
                         'parameters': '',
-                        'equipment': equipment,
+                        'equipment': tooling,
                         'remark': '',
                         'drawing_ref': ''
                     })
                     print(f'[后端-OCR] [表格解析] 添加工步 {sequence}: {content}')
+                    
+                    # 添加DrawingStep数据（新格式）
+                    drawing_step = {
+                        'step': sequence,
+                        'step_content': content,
+                        'tooling': tooling,
+                        'spindle_speed': spindle_speed,
+                        'cutting_speed': cutting_speed,
+                        'feed_rate': feed_rate,
+                        'depth_of_cut': depth_of_cut,
+                        'feed_count': feed_count,
+                        'machine_time': machine_time,
+                        'auxiliary_time': auxiliary_time
+                    }
+                    
+                    existing_drawing_steps = [s.get('step') for s in result.get('drawing_steps', [])]
+                    if drawing_step['step'] not in existing_drawing_steps:
+                        result['drawing_steps'].append(drawing_step)
+                        print(f'[后端-OCR] [表格解析] 添加DrawingStep {drawing_step["step"]}: {drawing_step["step_content"]}')
         
         # 检查是否是工步标题行
         if any('工步' in text for text in cell_texts):
@@ -452,6 +614,23 @@ class OCRProcessor:
             'tool_length': 0,
             'tool_diameter': 0,
             'steps': [],
+            'workshop': '',
+            'process_card_number': '',
+            'material_grade': '',
+            'blank_type': '',
+            'blank_size': '',
+            'blank_available_pieces': '',
+            'pieces_per_machine': '',
+            'equipment_model': '',
+            'equipment_no': '',
+            'simultaneous_pieces': '',
+            'fixture_no': '',
+            'cutting_fluid': '',
+            'station_tool_no': '',
+            'station_tool_name': '',
+            'preparation_time': '',
+            'unit_time': '',
+            'drawing_steps': [],
             'raw_text': '',
             'error': '百度OCR服务不可用，请先配置百度API密钥'
         }
