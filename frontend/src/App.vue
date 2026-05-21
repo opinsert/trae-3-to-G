@@ -40,10 +40,6 @@
         v-if="currentTab === 'stl'"
         @convert="handleConvert"
       />
-      <AdvanceView
-        v-if="currentTab === 'advance'"
-        @convert="handleConvert"
-      />
     </main>
 
     <GCodeModal
@@ -67,15 +63,13 @@ import { ref } from 'vue'
 import NaturalLanguageInput from './components/NaturalLanguageInput.vue'
 import DrawingUpload from './components/DrawingUpload.vue'
 import StlUpload from './components/StlUpload.vue'
-import AdvanceView from './views/AdvanceView.vue'
 import GCodeModal from './components/GCodeModal.vue'
 import ProcessCardModal from './components/ProcessCardModal.vue'
 
 const tabs = [
   { id: 'natural', name: '自然语言转换' },
   { id: 'drawing', name: '工序图转换' },
-  { id: 'stl', name: 'STL文件转换' },
-  { id: 'advance', name: '进阶功能' }
+  { id: 'stl', name: 'STL文件转换' }
 ]
 
 const currentTab = ref('natural')
