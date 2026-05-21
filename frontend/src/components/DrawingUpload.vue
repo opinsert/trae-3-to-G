@@ -239,26 +239,33 @@ const extractFromImage = async () => {
     const response = await drawingApi.ocrExtract(uploadedImage.value)
     
     console.log('[前端-OCR] 【步骤3】收到服务器响应')
-    console.log('  - HTTP状态码:', response.status)
-    console.log('  - 响应数据:', JSON.stringify(response.data, null, 2))
-    
-    if (response.data.success) {
-      console.log('[前端-OCR] ✓ OCR识别成功 (success=true)')
-      const data = response.data.data
+      console.log('  - HTTP状态码:', response.status)
+      console.log('  - 响应数据:', JSON.stringify(response.data, null, 2))
       
-      console.log('[前端-OCR] 【步骤4】解析识别结果')
-      console.log('  ├─ 产品名称:', data.product_name || '(空/未识别)')
-      console.log('  ├─ 工序名称:', data.process_name || '(空/未识别)')
-      console.log('  ├─ 工序编号:', data.process_number || '(空/未识别)')
-      console.log('  ├─ 版本号:', data.version || '(空/未识别)')
-      console.log('  ├─ 设备名称:', data.equipment || '(空/未识别)')
-      console.log('  ├─ 数控系统:', data.control_system || '(空/未识别)')
-      console.log('  ├─ 夹具名称:', data.fixture || '(空/未识别)')
-      console.log('  ├─ 材料名称:', data.material || '(空/未识别)')
-      console.log('  ├─ 刀具名称:', data.tool_name || '(空/未识别)')
-      console.log('  ├─ 刀具长度:', data.tool_length || '(空/未识别)')
-      console.log('  ├─ 刀具直径:', data.tool_diameter || '(空/未识别)')
-      console.log('  ├─ 工步数量:', data.steps?.length || data.operations?.length || 0)
+      if (response.data.success) {
+        console.log('[前端-OCR] ✓ OCR识别成功 (success=true)')
+        const data = response.data.data
+        
+        // 打印表格识别结果（如果有）
+        if (data.table_data) {
+          console.log('[前端-OCR] 【步骤3.5】表格识别结果')
+          console.log('  ├─ 表格数据:', JSON.stringify(data.table_data, null, 2).substring(0, 1000))
+          console.log('  └─ (表格数据已截断，查看完整数据请查看后端日志)')
+        }
+        
+        console.log('[前端-OCR] 【步骤4】解析识别结果')
+        console.log('  ├─ 产品名称:', data.product_name || '(空/未识别)')
+        console.log('  ├─ 工序名称:', data.process_name || '(空/未识别)')
+        console.log('  ├─ 工序编号:', data.process_number || '(空/未识别)')
+        console.log('  ├─ 版本号:', data.version || '(空/未识别)')
+        console.log('  ├─ 设备名称:', data.equipment || '(空/未识别)')
+        console.log('  ├─ 数控系统:', data.control_system || '(空/未识别)')
+        console.log('  ├─ 夹具名称:', data.fixture || '(空/未识别)')
+        console.log('  ├─ 材料名称:', data.material || '(空/未识别)')
+        console.log('  ├─ 刀具名称:', data.tool_name || '(空/未识别)')
+        console.log('  ├─ 刀具长度:', data.tool_length || '(空/未识别)')
+        console.log('  ├─ 刀具直径:', data.tool_diameter || '(空/未识别)')
+        console.log('  ├─ 工步数量:', data.steps?.length || data.operations?.length || 0)
       
       const detectedSteps = data.steps || data.operations || []
       if (detectedSteps && detectedSteps.length > 0) {
