@@ -6,6 +6,19 @@ class ToolInfo(BaseModel):
     length: float = Field(..., description="刀具长度")
     diameter: float = Field(..., description="刀具直径")
 
+class DrawingStep(BaseModel):
+    step: int = Field(..., description="工步号")
+    step_content: str = Field(..., description="工步内容")
+    tooling: Optional[str] = Field("", description="工艺装备")
+    spindle_speed: Optional[float] = Field(None, description="主轴转速")
+    cutting_speed: Optional[float] = Field(None, description="切削速度")
+    feed_rate: Optional[float] = Field(None, description="进给量")
+    depth_of_cut: Optional[float] = Field(None, description="被吃刀量")
+    feed_count: Optional[int] = Field(None, description="进给次数")
+    machine_time: Optional[float] = Field(None, description="机动工时")
+    auxiliary_time: Optional[float] = Field(None, description="辅助工时")
+    remark: Optional[str] = Field("", description="备注")
+
 class ProcessCard(BaseModel):
     product_name: str = Field(..., description="产品名称")
     process_name: str = Field(..., description="工序名称")
@@ -16,6 +29,22 @@ class ProcessCard(BaseModel):
     fixture: str = Field(..., description="夹具名称")
     material: str = Field(..., description="材料名称")
     tool_info: ToolInfo = Field(..., description="刀具信息")
+    workshop: Optional[str] = Field("", description="车间")
+    process_card_number: Optional[str] = Field("", description="工序号")
+    material_grade: Optional[str] = Field("", description="材料牌号")
+    blank_type: Optional[str] = Field("", description="毛坯种类")
+    blank_size: Optional[str] = Field("", description="毛坯外形尺寸")
+    blank_available_pieces: Optional[int] = Field(None, description="毛坯还可制件数")
+    pieces_per_machine: Optional[int] = Field(None, description="每台件数")
+    equipment_model: Optional[str] = Field("", description="设备型号")
+    equipment_no: Optional[str] = Field("", description="设备编号")
+    simultaneous_pieces: Optional[int] = Field(None, description="同时加工件数")
+    fixture_no: Optional[str] = Field("", description="夹具编号")
+    cutting_fluid: Optional[str] = Field("", description="切削液")
+    station_tool_no: Optional[str] = Field("", description="工位器具编号")
+    station_tool_name: Optional[str] = Field("", description="工位器具名称")
+    preparation_time: Optional[float] = Field(None, description="准终工时")
+    unit_time: Optional[float] = Field(None, description="单件工时")
 
 class Operation(BaseModel):
     sequence: int = Field(..., description="序号")
@@ -46,7 +75,8 @@ class ConvertResult(BaseModel):
 
 class ConvertData(BaseModel):
     process_card: ProcessCard = Field(..., description="工序卡信息")
-    operations: List[Operation] = Field(..., description="操作步骤")
+    operations: List[Operation] = Field([], description="操作步骤")
+    drawing_steps: List[DrawingStep] = Field([], description="工步步骤")
     gcode: str = Field(..., description="生成的G代码")
     validation: ValidationResult = Field(..., description="验证结果")
 
@@ -70,18 +100,13 @@ class ExampleItem(BaseModel):
     description: str = Field(..., description="示例描述")
     category: str = Field(..., description="示例分类")
     card_data: ProcessCard = Field(..., description="工序卡数据")
-    operations_data: List[Operation] = Field(..., description="操作步骤数据")
+    operations_data: List[Operation] = Field([], description="操作步骤数据")
+    drawing_steps_data: List[DrawingStep] = Field([], description="工步步骤数据")
     gcode: Optional[str] = Field("", description="参考G代码")
 
 class ExampleListResponse(BaseModel):
     success: bool = Field(..., description="是否成功")
     data: List[ExampleItem] = Field(..., description="示例列表")
-
-class DrawingStep(BaseModel):
-    step: int = Field(..., description="步骤序号")
-    drawing: str = Field(..., description="工序图(base64)")
-    gcode_segment: str = Field(..., description="对应的G代码片段")
-    operation_content: str = Field(..., description="操作内容")
 
 class AdvanceResponse(BaseModel):
     success: bool = Field(..., description="是否成功")
