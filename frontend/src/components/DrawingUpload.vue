@@ -2,6 +2,21 @@
   <div class="bg-white rounded-xl shadow-lg p-6">
     <h2 class="text-xl font-bold text-gray-800 mb-6">工序图转换</h2>
     
+    <!-- 格式切换 -->
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-2">工序卡格式</label>
+      <div class="flex space-x-4">
+        <label class="flex items-center">
+          <input type="radio" v-model="formatType" value="type1" class="mr-2" />
+          <span class="text-sm">格式1（设备+工序工时）</span>
+        </label>
+        <label class="flex items-center">
+          <input type="radio" v-model="formatType" value="type2" class="mr-2" />
+          <span class="text-sm">格式2（工位器具）</span>
+        </label>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- 左栏：图片上传 -->
       <div>
@@ -20,7 +35,7 @@
             class="hidden"
           />
           <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 0 0 1115.9 6L16 6a5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>
           <p class="mt-2 text-sm text-gray-600">点击或拖拽上传工序图</p>
           <p class="mt-1 text-xs text-gray-400">支持 JPG、PNG、PDF 等格式</p>
@@ -45,94 +60,137 @@
         <div class="border border-gray-300 rounded-lg overflow-hidden">
           <table class="w-full text-sm">
             <tbody>
-              <!-- 第1行 -->
+              <!-- 第一行：标签 -->
               <tr class="border-b border-gray-300">
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium w-1/4">车间</td>
-                <td class="border-r border-gray-300 px-2 py-1 w-1/4">
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center w-1/4">车间</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center w-1/4">工序号</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center w-1/4">工序名称</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center w-1/4">{{ materialLabel }}</td>
+              </tr>
+              <!-- 第二行：输入 -->
+              <tr class="border-b border-gray-300">
+                <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.workshop" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium w-1/4">工序号</td>
-                <td class="px-2 py-1 w-1/4">
+                <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.process_card_number" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-              </tr>
-              <!-- 第2行 -->
-              <tr class="border-b border-gray-300">
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">工序名称</td>
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.process_name" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">材料牌号</td>
                 <td class="px-2 py-1">
                   <input v-model="form.material_grade" type="text" class="w-full border-none focus:ring-0" />
                 </td>
               </tr>
-              <!-- 第3行 -->
+              <!-- 第三行：标签 -->
               <tr class="border-b border-gray-300">
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">毛坯种类</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">毛坯种类</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">{{ blankSizeLabel }}</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">{{ blankAvailableLabel }}</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center">每台件数</td>
+              </tr>
+              <!-- 第四行：输入 -->
+              <tr class="border-b border-gray-300">
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.blank_type" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">毛坯外形尺寸</td>
-                <td class="px-2 py-1">
+                <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.blank_size" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-              </tr>
-              <!-- 第4行 -->
-              <tr class="border-b border-gray-300">
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">毛坯还可制件数</td>
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model.number="form.blank_available_pieces" type="number" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">每台件数</td>
                 <td class="px-2 py-1">
                   <input v-model.number="form.pieces_per_machine" type="number" class="w-full border-none focus:ring-0" />
                 </td>
               </tr>
-              <!-- 第5行 -->
-              <tr class="border-b border-gray-300">
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">设备名称</td>
+              <!-- 第五行：标签 - 根据格式变化 -->
+              <tr class="border-b border-gray-300" v-if="formatType === 'type1'">
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">夹具编号</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">夹具名称</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">每台件数</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center">切削液</td>
+              </tr>
+              <!-- 第五行：输入 - 格式1 -->
+              <tr class="border-b border-gray-300" v-if="formatType === 'type1'">
+                <td class="border-r border-gray-300 px-2 py-1">
+                  <input v-model="form.fixture_no" type="text" class="w-full border-none focus:ring-0" />
+                </td>
+                <td class="border-r border-gray-300 px-2 py-1">
+                  <input v-model="form.fixture" type="text" class="w-full border-none focus:ring-0" />
+                </td>
+                <td class="border-r border-gray-300 px-2 py-1">
+                  <input v-model.number="form.pieces_per_machine" type="number" class="w-full border-none focus:ring-0" />
+                </td>
+                <td class="px-2 py-1">
+                  <input v-model="form.cutting_fluid" type="text" class="w-full border-none focus:ring-0" />
+                </td>
+              </tr>
+              <!-- 第五行：标签 - 格式2 -->
+              <tr class="border-b border-gray-300" v-if="formatType === 'type2'">
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">设备名称</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">设备型号</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">设备编号</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center">同时加工件数</td>
+              </tr>
+              <!-- 第五行：输入 - 格式2 -->
+              <tr class="border-b border-gray-300" v-if="formatType === 'type2'">
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.equipment" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">设备型号</td>
-                <td class="px-2 py-1">
+                <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.equipment_model" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-              </tr>
-              <!-- 第6行 -->
-              <tr class="border-b border-gray-300">
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">设备编号</td>
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.equipment_no" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">同时加工件数</td>
                 <td class="px-2 py-1">
                   <input v-model.number="form.simultaneous_pieces" type="number" class="w-full border-none focus:ring-0" />
                 </td>
               </tr>
-              <!-- 第7行 -->
-              <tr>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">夹具编号</td>
+              <!-- 第六行：标签 - 格式1 -->
+              <tr class="border-b border-gray-300" v-if="formatType === 'type1'">
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">设备名称</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">设备型号</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center" colspan="2">工序工时</td>
+              </tr>
+              <!-- 第六行：输入 - 格式1 -->
+              <tr class="border-b border-gray-300" v-if="formatType === 'type1'">
+                <td class="border-r border-gray-300 px-2 py-1">
+                  <input v-model="form.equipment" type="text" class="w-full border-none focus:ring-0" />
+                </td>
+                <td class="border-r border-gray-300 px-2 py-1">
+                  <input v-model="form.equipment_model" type="text" class="w-full border-none focus:ring-0" />
+                </td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">准终</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center">单件</td>
+              </tr>
+              <!-- 第七行：输入 - 格式1 -->
+              <tr v-if="formatType === 'type1'">
+                <td class="border-r border-gray-300 bg-gray-50 px-2 py-1"></td>
+                <td class="border-r border-gray-300 bg-gray-50 px-2 py-1"></td>
+                <td class="border-r border-gray-300 px-2 py-1">
+                  <input v-model.number="form.preparation_time" type="number" class="w-full border-none focus:ring-0" />
+                </td>
+                <td class="px-2 py-1">
+                  <input v-model.number="form.unit_time" type="number" class="w-full border-none focus:ring-0" />
+                </td>
+              </tr>
+              <!-- 第六行：标签 - 格式2 -->
+              <tr class="border-b border-gray-300" v-if="formatType === 'type2'">
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">夹具编号</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">夹具名称</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center" colspan="2">切削液</td>
+              </tr>
+              <!-- 第六行：输入 - 格式2 -->
+              <tr v-if="formatType === 'type2'">
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.fixture_no" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">夹具名称</td>
-                <td class="px-2 py-1">
+                <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.fixture" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 切削液单独一行 -->
-        <div class="border border-gray-300 rounded-lg overflow-hidden">
-          <table class="w-full text-sm">
-            <tbody>
-              <tr>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium w-1/4">切削液</td>
-                <td class="px-2 py-1 w-3/4">
+                <td class="px-2 py-1" colspan="2">
                   <input v-model="form.cutting_fluid" type="text" class="w-full border-none focus:ring-0" />
                 </td>
               </tr>
@@ -140,33 +198,34 @@
           </table>
         </div>
 
-        <!-- 工位器具和工时 -->
-        <div class="border border-gray-300 rounded-lg overflow-hidden">
+        <!-- 工位器具和工时 - 仅格式2显示 -->
+        <div class="border border-gray-300 rounded-lg overflow-hidden" v-if="formatType === 'type2'">
           <table class="w-full text-sm">
             <tbody>
+              <!-- 第一行：标签 -->
+              <tr class="border-b border-gray-300">
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center w-1/4">工位器具编号</td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center w-1/4">工位器具名称</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center" colspan="2">工序工时（分）</td>
+              </tr>
+              <!-- 第二行：标签 -->
+              <tr class="border-b border-gray-300">
+                <td class="border-r border-gray-300 bg-gray-50 px-2 py-1"></td>
+                <td class="border-r border-gray-300 bg-gray-50 px-2 py-1"></td>
+                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">准终</td>
+                <td class="bg-gray-100 px-2 py-1 font-medium text-center">单件</td>
+              </tr>
+              <!-- 第三行：输入 -->
               <tr>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">工位器具编号</td>
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.station_tool_no" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">工位器具名称</td>
                 <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model="form.station_tool_name" type="text" class="w-full border-none focus:ring-0" />
                 </td>
-                <td class="bg-gray-100 px-2 py-1 font-medium" colspan="2">工序工时（分）</td>
-              </tr>
-              <tr>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium" colspan="2"></td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium" colspan="2"></td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">准终</td>
-                <td class="px-2 py-1">
+                <td class="border-r border-gray-300 px-2 py-1">
                   <input v-model.number="form.preparation_time" type="number" class="w-full border-none focus:ring-0" />
                 </td>
-              </tr>
-              <tr>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium" colspan="2"></td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium" colspan="2"></td>
-                <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium">单件</td>
                 <td class="px-2 py-1">
                   <input v-model.number="form.unit_time" type="number" class="w-full border-none focus:ring-0" />
                 </td>
@@ -276,6 +335,12 @@ const uploadedImage = ref('')
 const loading = ref(false)
 const extracting = ref(false)
 const missingFields = ref([])
+const formatType = ref('type2') // 默认格式2
+
+// 动态标签
+const materialLabel = computed(() => formatType.value === 'type1' ? '材料号' : '材料牌号')
+const blankSizeLabel = computed(() => formatType.value === 'type1' ? '外形尺寸' : '毛坯外形尺寸')
+const blankAvailableLabel = computed(() => formatType.value === 'type1' ? '每毛坯可制件数' : '毛坯还可制件数')
 
 const form = reactive({
   product_name: '测试产品',
@@ -286,11 +351,9 @@ const form = reactive({
   control_system: '',
   fixture: '',
   material: '',
-  tool_info: {
-    name: '平底铣刀',
-    length: 50,
-    diameter: 8
-  },
+  tool_name: '平底铣刀',
+  tool_length: 50,
+  tool_diameter: 8,
   workshop: '金工',
   process_card_number: '5',
   material_grade: '45',
@@ -334,56 +397,62 @@ const form = reactive({
       auxiliary_time: null,
       remark: ''
     }
+  ],
+  operations: [
+    {
+      sequence: 1,
+      content: '钻孔 M8',
+      parameters: '',
+      equipment: 'Φ7 麻花钻',
+      remark: ''
+    },
+    {
+      sequence: 2,
+      content: '攻螺纹 M8',
+      parameters: '',
+      equipment: '',
+      remark: ''
+    }
   ]
 })
 
 const validSteps = computed(() => {
   if (!form.steps || !Array.isArray(form.steps)) {
-    console.log('[前端] validSteps: 数组为空或不存在')
     return []
   }
-  const valid = form.steps.filter(step => {
-    return step && typeof step === 'object' && typeof step.step_content === 'string'
-  })
-  console.log('[前端] validSteps:', valid.length, '个有效工步')
-  return valid
+  return form.steps
 })
 
 const validMissingFields = computed(() => {
   if (!missingFields.value || !Array.isArray(missingFields.value)) {
     return []
   }
-  return missingFields.value.filter(field => typeof field === 'string')
+  return missingFields.value
 })
 
 const triggerUpload = () => {
   fileInput.value?.click()
 }
 
-const handleFileSelect = (event) => {
-  const file = event.target.files?.[0]
-  if (file) {
-    console.log('[前端] 选择文件:', file.name, file.size, 'bytes')
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      uploadedImage.value = e.target?.result
-      console.log('[前端] 文件读取完成，长度:', uploadedImage.value.length)
-    }
-    reader.readAsDataURL(file)
+const handleDrop = (e) => {
+  const files = e.dataTransfer.files
+  if (files.length > 0) {
+    handleFile(files[0])
   }
 }
 
-const handleDrop = (event) => {
-  const file = event.dataTransfer?.files?.[0]
-  if (file && file.type.startsWith('image/')) {
-    console.log('[前端] 拖拽文件:', file.name, file.size, 'bytes')
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      uploadedImage.value = e.target?.result
-      console.log('[前端] 拖拽文件读取完成，长度:', uploadedImage.value.length)
-    }
-    reader.readAsDataURL(file)
+const handleFileSelect = (e) => {
+  if (e.target.files?.length > 0) {
+    handleFile(e.target.files[0])
   }
+}
+
+const handleFile = (file) => {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    uploadedImage.value = e.target.result
+  }
+  reader.readAsDataURL(file)
 }
 
 const extractFromImage = async () => {
@@ -393,190 +462,71 @@ const extractFromImage = async () => {
   }
 
   extracting.value = true
-  console.log('='.repeat(80))
-  console.log('[前端-OCR] ================== 开始OCR识别流程 ==================')
-  console.log('='.repeat(80))
-  
-  console.log('[前端-OCR] 【步骤1】图片数据准备')
-  console.log('  - 图片是否存在:', !!uploadedImage.value)
-  console.log('  - 图片数据长度:', uploadedImage.value.length, '字符')
-  console.log('  - 图片数据前缀:', uploadedImage.value.substring(0, 80))
-  console.log('  - 数据格式:', uploadedImage.value.substring(0, uploadedImage.value.indexOf(',')))
-
   try {
-    console.log('[前端-OCR] 【步骤2】发送OCR识别请求到后端')
-    console.log('  - 请求URL: POST /api/v1/drawing/ocr-extract')
-    console.log('  - 图片数据长度:', uploadedImage.value.length)
-    
     const response = await drawingApi.ocrExtract(uploadedImage.value)
-    
-    console.log('[前端-OCR] 【步骤3】收到服务器响应')
-      console.log('  - HTTP状态码:', response.status)
-      console.log('  - 响应数据:', JSON.stringify(response.data, null, 2))
-      
-      if (response.data.success) {
-        console.log('[前端-OCR] ✓ OCR识别成功 (success=true)')
-        const data = response.data.data
-        
-        // 打印表格识别结果（如果有）
-        if (data.table_data) {
-          console.log('[前端-OCR] 【步骤3.5】表格识别结果')
-          console.log('  ├─ 表格数据:', JSON.stringify(data.table_data, null, 2).substring(0, 1000))
-          console.log('  └─ (表格数据已截断，查看完整数据请查看后端日志)')
-        }
-        
-        console.log('[前端-OCR] 【步骤4】解析识别结果')
-        console.log('  ├─ 车间:', data.workshop || '(空/未识别)')
-        console.log('  ├─ 工序号:', data.process_card_number || '(空/未识别)')
-        console.log('  ├─ 工序名称:', data.process_name || '(空/未识别)')
-        console.log('  ├─ 材料牌号:', data.material_grade || '(空/未识别)')
-        console.log('  ├─ 毛坯种类:', data.blank_type || '(空/未识别)')
-        console.log('  ├─ 毛坯外形尺寸:', data.blank_size || '(空/未识别)')
-        console.log('  ├─ 毛坯还可制件数:', data.blank_available_pieces || '(空/未识别)')
-        console.log('  ├─ 每台件数:', data.pieces_per_machine || '(空/未识别)')
-        console.log('  ├─ 设备名称:', data.equipment || '(空/未识别)')
-        console.log('  ├─ 设备型号:', data.equipment_model || '(空/未识别)')
-        console.log('  ├─ 设备编号:', data.equipment_no || '(空/未识别)')
-        console.log('  ├─ 同时加工件数:', data.simultaneous_pieces || '(空/未识别)')
-        console.log('  ├─ 夹具编号:', data.fixture_no || '(空/未识别)')
-        console.log('  ├─ 夹具名称:', data.fixture || '(空/未识别)')
-        console.log('  ├─ 切削液:', data.cutting_fluid || '(空/未识别)')
-        console.log('  ├─ 工位器具编号:', data.station_tool_no || '(空/未识别)')
-        console.log('  ├─ 工位器具名称:', data.station_tool_name || '(空/未识别)')
-        console.log('  ├─ 准终工时:', data.preparation_time || '(空/未识别)')
-        console.log('  ├─ 单件工时:', data.unit_time || '(空/未识别)')
-        
-        const detectedSteps = data.drawing_steps || data.steps || data.operations || []
-        console.log('  ├─ 工步数量:', detectedSteps.length)
-        if (detectedSteps && detectedSteps.length > 0) {
-          console.log('  └─ 工步详情:')
-          detectedSteps.forEach((step, index) => {
-            console.log(`      [工步${index + 1}]:`, JSON.stringify(step))
-          })
-        } else {
-          console.log('  └─ 工步详情: 无')
-        }
-        
-        if (data.raw_text) {
-          console.log('  ├─ 原始文本长度:', data.raw_text.length, '字符')
-          console.log('  ├─ 原始文本内容预览:')
-          console.log('  |  ' + '-'.repeat(76))
-          const lines = data.raw_text.split('\n').slice(0, 10)
-          lines.forEach(line => {
-            console.log('  |  ' + line)
-          })
-          if (data.raw_text.split('\n').length > 10) {
-            console.log('  |  ... (还有', data.raw_text.split('\n').length - 10, '行)')
-          }
-          console.log('  |  ' + '-'.repeat(76))
-        } else {
-          console.log('  ├─ 原始文本: (无)')
-        }
-        
-        if (data.error) {
-          console.log('  └─ ⚠ 识别警告:', data.error)
-        }
-        
-        console.log('[前端-OCR] 【步骤5】填充表单数据')
-        
-        if (data.workshop !== undefined) form.workshop = data.workshop
-        if (data.process_card_number !== undefined) form.process_card_number = data.process_card_number
-        if (data.process_name !== undefined) form.process_name = data.process_name
-        if (data.material_grade !== undefined) form.material_grade = data.material_grade
-        if (data.blank_type !== undefined) form.blank_type = data.blank_type
-        if (data.blank_size !== undefined) form.blank_size = data.blank_size
-        if (data.blank_available_pieces !== undefined) form.blank_available_pieces = data.blank_available_pieces
-        if (data.pieces_per_machine !== undefined) form.pieces_per_machine = data.pieces_per_machine
-        if (data.equipment !== undefined) form.equipment = data.equipment
-        if (data.equipment_model !== undefined) form.equipment_model = data.equipment_model
-        if (data.equipment_no !== undefined) form.equipment_no = data.equipment_no
-        if (data.simultaneous_pieces !== undefined) form.simultaneous_pieces = data.simultaneous_pieces
-        if (data.fixture_no !== undefined) form.fixture_no = data.fixture_no
-        if (data.fixture !== undefined) form.fixture = data.fixture
-        if (data.cutting_fluid !== undefined) form.cutting_fluid = data.cutting_fluid
-        if (data.station_tool_no !== undefined) form.station_tool_no = data.station_tool_no
-        if (data.station_tool_name !== undefined) form.station_tool_name = data.station_tool_name
-        if (data.preparation_time !== undefined) form.preparation_time = data.preparation_time
-        if (data.unit_time !== undefined) form.unit_time = data.unit_time
-
-        console.log('[前端-OCR] 【步骤6】处理工步数据')
-        console.log('  - 当前表单工步数量:', form.steps.length)
-        
-        if (detectedSteps && Array.isArray(detectedSteps) && detectedSteps.length > 0) {
-          console.log('  - 服务器返回的工步数量:', detectedSteps.length)
-          
-          const validStepList = detectedSteps.filter(step => {
-            const isValid = step && typeof step === 'object'
-            if (!isValid) {
-              console.log('    ⚠ 跳过无效工步:', JSON.stringify(step))
+    const extractedData = response.data?.data || response.data
+    if (extractedData) {
+      // 填充表单数据
+      Object.keys(extractedData).forEach(key => {
+        if (key in form) {
+          if (key === 'steps' || key === 'drawing_steps' || key === 'operations') {
+            // 处理数组数据
+            const data = extractedData[key]
+            if (data && Array.isArray(data) && data.length > 0) {
+              if (key === 'drawing_steps') {
+                form.steps = data.map((step, index) => ({
+                  ...step,
+                  step: step.step || index + 1
+                }))
+              } else if (key === 'steps') {
+                form.operations = data.map((step, index) => ({
+                  sequence: step.step || index + 1,
+                  content: step.step_content || '',
+                  parameters: '',
+                  equipment: step.tooling || '',
+                  remark: ''
+                }))
+              } else {
+                form[key] = data
+              }
             }
-            return isValid
-          }).map((step, index) => {
-            const mapped = {
-              step: step.step || step.sequence || index + 1,
-              step_content: step.step_content || step.content || '',
-              tooling: step.tooling || step.equipment || '',
-              spindle_speed: step.spindle_speed !== undefined ? step.spindle_speed : null,
-              cutting_speed: step.cutting_speed !== undefined ? step.cutting_speed : null,
-              feed_rate: step.feed_rate !== undefined ? step.feed_rate : null,
-              depth_of_cut: step.depth_of_cut !== undefined ? step.depth_of_cut : null,
-              feed_count: step.feed_count !== undefined ? step.feed_count : null,
-              machine_time: step.machine_time !== undefined ? step.machine_time : null,
-              auxiliary_time: step.auxiliary_time !== undefined ? step.auxiliary_time : null,
-              remark: step.remark || ''
-            }
-            console.log('    ✓ 映射工步' + (index + 1) + ':', JSON.stringify(mapped))
-            return mapped
-          })
-          
-          console.log('  - 过滤后的有效工步数量:', validStepList.length)
-          
-          if (validStepList.length > 0) {
-            console.log('  → 替换表单工步列表')
-            form.steps = validStepList
           } else {
-            console.log('  ⚠ 没有有效的工步，保持原有列表')
+            // 处理基本字段，智能转换类型
+            const value = extractedData[key]
+            if (value !== null && value !== undefined && value !== '') {
+              form[key] = value
+            }
           }
-        } else {
-          console.log('  ⚠ 服务器没有返回工步数据，保持原有列表')
         }
+      })
 
-        console.log('[前端-OCR] 【步骤7】最终状态')
-        console.log('  ├─ 车间:', form.workshop)
-        console.log('  ├─ 工序名称:', form.process_name)
-        console.log('  ├─ 设备名称:', form.equipment)
-        console.log('  ├─ 工步数量:', form.steps.length)
-        console.log('  └─ 工步:', JSON.stringify(form.steps))
-        console.log('[前端-OCR] ✓ OCR识别流程完成')
-        console.log('='.repeat(80))
-        
-        alert('信息提取成功！请检查并补充缺失字段')
-      } else {
-        console.error('[前端-OCR] ✗ OCR识别失败')
-        console.error('[前端-OCR]  - 错误信息:', response.data.message || '未知错误')
-        console.error('[前端-OCR]  - 缺失字段:', response.data.missing_fields || [])
-        console.log('='.repeat(80))
-        alert('图片识别失败，请手动填写')
+      // 处理 drawing_steps 兼容
+      if (extractedData.drawing_steps && Array.isArray(extractedData.drawing_steps) && extractedData.drawing_steps.length > 0) {
+        form.steps = extractedData.drawing_steps.map((step, index) => ({
+          ...step,
+          step: step.step || index + 1
+        }))
+        form.operations = extractedData.drawing_steps.map((step, index) => ({
+          sequence: step.step || index + 1,
+          content: step.step_content || '',
+          parameters: '',
+          equipment: step.tooling || '',
+          remark: ''
+        }))
       }
-  } catch (error) {
-    console.error('[前端-OCR] ✗ 请求失败')
-    console.error('  - 错误类型:', error.name)
-    console.error('  - 错误信息:', error.message)
-    if (error.response) {
-      console.error('  - HTTP状态码:', error.response.status)
-      console.error('  - 响应数据:', JSON.stringify(error.response.data, null, 2))
     }
-    console.error('  - 完整错误:', error)
-    console.log('='.repeat(80))
-    alert('识别失败，请手动填写')
+    alert('信息提取成功！')
+  } catch (error) {
+    console.error('提取失败:', error)
+    alert('信息提取失败，请重试')
   } finally {
     extracting.value = false
   }
 }
 
 const addStep = () => {
-  form.steps.push({
-    step: form.steps.length + 1,
+  const newStep = {
+    step: (form.steps?.length || 0) + 1,
     step_content: '',
     tooling: '',
     spindle_speed: null,
@@ -587,12 +537,17 @@ const addStep = () => {
     machine_time: null,
     auxiliary_time: null,
     remark: ''
-  })
+  }
+  if (!form.steps) {
+    form.steps = []
+  }
+  form.steps.push(newStep)
 }
 
 const removeStep = (index) => {
-  if (form.steps.length > 1) {
+  if (form.steps) {
     form.steps.splice(index, 1)
+    // 重新编号
     form.steps.forEach((step, i) => {
       step.step = i + 1
     })
@@ -602,31 +557,23 @@ const removeStep = (index) => {
 const convert = async () => {
   loading.value = true
   missingFields.value = []
-  
-  console.log('[前端-转换] 开始转换流程')
-  console.log('[前端-转换] 表单数据:', JSON.stringify(form, null, 2))
-  console.log('[前端-转换] 有效工步:', JSON.stringify(validSteps.value, null, 2))
-  
   try {
-    const response = await drawingApi.convert(form, validSteps.value)
-    console.log('[前端-转换] 收到响应:', JSON.stringify(response.data, null, 2))
-    
-    if (response.data.success) {
-      if (response.data.data) {
-        console.log('[前端-转换] ✓ 转换成功')
-        emit('convert', response.data.data)
-      } else {
-        console.error('[前端-转换] ✗ 成功响应但没有数据')
-        alert('转换成功但没有返回数据')
-      }
-    } else {
-      missingFields.value = response.data.missing_fields || []
-      console.log('[前端-转换] ⚠ 缺失字段:', missingFields.value)
+    // 构建发送给后端的数据，兼容旧格式
+    const payload = {
+      ...form,
+      // 同时发送旧格式和新格式
+      drawing_steps: form.steps,
+      steps: form.steps
     }
+    
+    await emit('convert', payload)
   } catch (error) {
-    console.error('[前端-转换] ✗ 转换失败:', error)
-    console.error('[前端-转换] 错误详情:', error.response?.data || error.message)
-    alert('转换失败，请查看控制台了解详细错误')
+    if (error.response?.data?.missing_fields) {
+      missingFields.value = error.response.data.missing_fields
+    } else {
+      console.error('转换失败:', error)
+      alert('转换失败，请重试')
+    }
   } finally {
     loading.value = false
   }
