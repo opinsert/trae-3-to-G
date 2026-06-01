@@ -59,6 +59,13 @@ frontend/.npm_cache/
 test.jpg
 test_ocr.py
 工序图.jpg
+工序图.png
+*.docx
+*.pdf
+
+# Trae documents
+.trae/documents/
+.trae/specs/
 
 # OCR models (if not needed)
 # backend/models/

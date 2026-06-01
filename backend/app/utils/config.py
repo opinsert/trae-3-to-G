@@ -3,6 +3,11 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_api_url: str = "https://api.deepseek.com/v1/chat/completions"
+    vision_ocr_api_key: str = ""
+    vision_ocr_base_url: str = "https://api.openclawplan.com"
+    vision_ocr_model: str = "gpt-5.5-xhigh"
+    vision_ocr_timeout: int = 60
+    vision_ocr_enabled: bool = True
     baidu_app_id: str = ""
     baidu_api_key: str = ""
     baidu_secret_key: str = ""
