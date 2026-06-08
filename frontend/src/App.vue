@@ -40,21 +40,12 @@
         v-if="currentTab === 'stl'"
         @convert="handleConvert"
       />
+      <InlineGCodeViewer
+        v-if="convertedData?.gcode"
+        :gcode="convertedData.gcode"
+        :manual-validation="currentTab === 'natural'"
+      />
     </main>
-
-    <GCodeModal
-      v-if="showGCodeModal && convertedData"
-      :gcode="convertedData.gcode"
-      :validation="convertedData.validation"
-      @close="showGCodeModal = false"
-    />
-
-    <ProcessCardModal
-      v-if="showProcessCardModal && convertedData"
-      :process-card="convertedData.process_card"
-      :operations="convertedData.operations"
-      @close="showProcessCardModal = false"
-    />
   </div>
 </template>
 
@@ -63,8 +54,7 @@ import { ref } from 'vue'
 import NaturalLanguageInput from './components/NaturalLanguageInput.vue'
 import DrawingUpload from './components/DrawingUpload.vue'
 import StlUpload from './components/StlUpload.vue'
-import GCodeModal from './components/GCodeModal.vue'
-import ProcessCardModal from './components/ProcessCardModal.vue'
+import InlineGCodeViewer from './components/InlineGCodeViewer.vue'
 
 const tabs = [
   { id: 'natural', name: '自然语言转换' },
@@ -74,15 +64,11 @@ const tabs = [
 
 const currentTab = ref('natural')
 const convertedData = ref(null)
-const showGCodeModal = ref(false)
-const showProcessCardModal = ref(false)
 
 const handleConvert = (data) => {
   console.log('收到转换数据:', data)
   if (data) {
     convertedData.value = data
-    showGCodeModal.value = true
-    showProcessCardModal.value = true
   } else {
     console.error('没有收到转换数据')
     alert('转换失败：没有收到数据')

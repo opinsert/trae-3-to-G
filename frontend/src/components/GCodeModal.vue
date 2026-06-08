@@ -1,6 +1,6 @@
 <template>
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-[95vw] w-full h-[85vh] overflow-hidden flex flex-col">
       <div class="flex items-center justify-between px-6 py-4 border-b bg-blue-50">
         <h2 class="text-xl font-bold text-blue-800">G代码</h2>
         <button @click="close" class="text-gray-500 hover:text-gray-700">
@@ -10,8 +10,25 @@
         </button>
       </div>
 
-      <div class="flex-1 overflow-auto p-4 max-h-[60vh]">
-        <pre class="gcode-textarea whitespace-pre-wrap text-sm font-mono"><code>{{ gcode || '' }}</code></pre>
+      <div class="flex-1 overflow-hidden p-4 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
+        <div class="flex flex-col min-h-0">
+          <div class="mb-2 text-sm font-medium text-gray-700">生成的G代码</div>
+          <div class="flex-1 overflow-auto border rounded-lg bg-gray-50 p-3">
+            <pre class="gcode-textarea whitespace-pre-wrap text-sm font-mono"><code>{{ gcode || '' }}</code></pre>
+          </div>
+        </div>
+
+        <div class="flex flex-col min-h-0">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <div class="text-sm font-medium text-gray-700">NCViewer验证窗口</div>
+            <div class="text-xs text-gray-500">如未自动加载，请复制左侧G代码手动粘贴</div>
+          </div>
+          <iframe
+            :src="ncviewerUrl"
+            title="NCViewer G代码验证"
+            class="flex-1 w-full border rounded-lg bg-white"
+          ></iframe>
+        </div>
       </div>
 
       <div class="p-4 border-t bg-gray-50">
@@ -32,7 +49,7 @@
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
             </svg>
-            在线验证
+            新窗口打开NCViewer
           </button>
         </div>
       </div>
@@ -58,7 +75,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   gcode: {
@@ -74,6 +91,10 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const copied = ref(false)
+
+const ncviewerUrl = computed(() => {
+  return `https://ncviewer.com/?code=${encodeURIComponent(props.gcode || '')}`
+})
 
 const close = () => {
   emit('close')
@@ -92,8 +113,6 @@ const copyGCode = async () => {
 }
 
 const validateGCode = () => {
-  const encodedGCode = encodeURIComponent(props.gcode)
-  const url = `https://ncviewer.com/?code=${encodedGCode}`
-  window.open(url, '_blank')
+  window.open(ncviewerUrl.value, '_blank')
 }
 </script>
