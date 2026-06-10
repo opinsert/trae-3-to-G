@@ -41,7 +41,7 @@
         @convert="handleConvert"
       />
       <InlineGCodeViewer
-        v-if="convertedData?.gcode"
+        v-if="convertedData?.gcode && currentTab !== 'stl'"
         :gcode="convertedData.gcode"
         :manual-validation="currentTab === 'natural'"
       />

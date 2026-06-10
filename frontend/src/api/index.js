@@ -18,7 +18,8 @@ export const drawingApi = {
 }
 
 export const stlApi = {
-  convert: (stlFile, processCard) => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard })
+  convert: (stlFile, processCard) => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, generate_gcode: false }),
+  generateGcode: (stlFile, processCard, operations) => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, operations, generate_gcode: true })
 }
 
 export const gcodeApi = {
