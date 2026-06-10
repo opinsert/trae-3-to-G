@@ -10,6 +10,8 @@ router = APIRouter()
 class STLConvertRequest(BaseModel):
     stl_file: str
     process_card: ProcessCard
+    generate_gcode: bool = False
+    operations: list = []
 
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_stl(request: STLConvertRequest):
@@ -28,10 +30,10 @@ async def convert_stl(request: STLConvertRequest):
             'tool_diameter': request.process_card.tool_info.diameter,
             'operations': []
         }
-        
-        operations = generate_operations_from_stl(request.stl_file)
-        params['operations'] = operations
-        
+
+        ops = request.operations if request.operations else generate_operations_from_stl(request.stl_file)
+        params['operations'] = ops
+
         result, missing = validate_and_convert(params)
         if missing:
             return ConvertResponse(
@@ -39,11 +41,24 @@ async def convert_stl(request: STLConvertRequest):
                 message="参数不完整",
                 missing_fields=missing
             )
-        
+
         process_card, operations = result
+
+        if not request.generate_gcode:
+            return ConvertResponse(
+                success=True,
+                message="工序生成成功",
+                data=ConvertData(
+                    process_card=process_card,
+                    operations=operations,
+                    gcode='',
+                    validation=None
+                )
+            )
+
         gcode = generate_gcode(process_card, operations)
         validation = validate_gcode(gcode)
-        
+
         return ConvertResponse(
             success=True,
             message="转换成功",
