@@ -7,6 +7,42 @@ import traceback
 
 from app.utils.config import settings
 
+def _empty_ocr_result(**overrides) -> dict:
+    result = {
+        'product_name': '',
+        'process_name': '',
+        'process_number': '',
+        'version': '',
+        'equipment': '',
+        'control_system': '',
+        'fixture': '',
+        'material': '',
+        'tool_name': '',
+        'tool_length': 0,
+        'tool_diameter': 0,
+        'steps': [],
+        'workshop': '',
+        'process_card_number': '',
+        'material_grade': '',
+        'blank_type': '',
+        'blank_size': '',
+        'blank_available_pieces': '',
+        'pieces_per_machine': '',
+        'equipment_model': '',
+        'equipment_no': '',
+        'simultaneous_pieces': '',
+        'fixture_no': '',
+        'cutting_fluid': '',
+        'station_tool_no': '',
+        'station_tool_name': '',
+        'preparation_time': '',
+        'unit_time': '',
+        'drawing_steps': []
+    }
+    result.update(overrides)
+    return result
+
+
 class OCRProcessor:
     def __init__(self):
         self.baidu_api_key = None
@@ -557,37 +593,7 @@ class OCRProcessor:
         print('[后端-OCR] [解析] 开始解析识别文本')
         print('[后端-OCR] [解析] 识别到', len(all_words), '个文字块')
         
-        extracted = {
-            'product_name': '',
-            'process_name': '',
-            'process_number': '',
-            'version': '',
-            'equipment': '',
-            'control_system': '',
-            'fixture': '',
-            'material': '',
-            'tool_name': '',
-            'tool_length': 0,
-            'tool_diameter': 0,
-            'steps': [],
-            'workshop': '',
-            'process_card_number': '',
-            'material_grade': '',
-            'blank_type': '',
-            'blank_size': '',
-            'blank_available_pieces': '',
-            'pieces_per_machine': '',
-            'equipment_model': '',
-            'equipment_no': '',
-            'simultaneous_pieces': '',
-            'fixture_no': '',
-            'cutting_fluid': '',
-            'station_tool_no': '',
-            'station_tool_name': '',
-            'preparation_time': '',
-            'unit_time': '',
-            'drawing_steps': []
-        }
+        extracted = _empty_ocr_result()
         
         step_keywords = ['铣削', '车削', '钻孔', '攻丝', '铰孔', '镗孔', '磨削', '倒角', '开槽', '精铣', '粗铣']
         equipment_keywords = ['铣床', '车床', '磨床', '加工中心', '钻床', '镗床']
@@ -829,36 +835,7 @@ class OCRProcessor:
         """解析百度表格识别V2结果"""
         print('[后端-OCR] [表格解析] ===== 开始解析表格识别数据 =====')
         
-        result = {
-            'product_name': '',
-            'process_name': '',
-            'process_number': '',
-            'equipment': '',
-            'control_system': '',
-            'fixture': '',
-            'material': '',
-            'tool_name': '',
-            'tool_length': 0,
-            'tool_diameter': 0,
-            'steps': [],
-            'workshop': '',
-            'process_card_number': '',
-            'material_grade': '',
-            'blank_type': '',
-            'blank_size': '',
-            'blank_available_pieces': '',
-            'pieces_per_machine': '',
-            'equipment_model': '',
-            'equipment_no': '',
-            'simultaneous_pieces': '',
-            'fixture_no': '',
-            'cutting_fluid': '',
-            'station_tool_no': '',
-            'station_tool_name': '',
-            'preparation_time': '',
-            'unit_time': '',
-            'drawing_steps': []
-        }
+        result = _empty_ocr_result()
         
         # 打印表格识别完整结果（用于调试）
         print('[后端-OCR] [表格解析] 表格识别原始结果:', str(table_result)[:600])
@@ -1404,39 +1381,10 @@ class OCRProcessor:
 
     def _fallback_recognize(self, image_data: str) -> dict:
         print('[后端-OCR] [备用] 百度OCR不可用')
-        return {
-            'product_name': '',
-            'process_name': '',
-            'process_number': '',
-            'version': '',
-            'equipment': '',
-            'control_system': '',
-            'fixture': '',
-            'material': '',
-            'tool_name': '',
-            'tool_length': 0,
-            'tool_diameter': 0,
-            'steps': [],
-            'workshop': '',
-            'process_card_number': '',
-            'material_grade': '',
-            'blank_type': '',
-            'blank_size': '',
-            'blank_available_pieces': '',
-            'pieces_per_machine': '',
-            'equipment_model': '',
-            'equipment_no': '',
-            'simultaneous_pieces': '',
-            'fixture_no': '',
-            'cutting_fluid': '',
-            'station_tool_no': '',
-            'station_tool_name': '',
-            'preparation_time': '',
-            'unit_time': '',
-            'drawing_steps': [],
-            'raw_text': '',
-            'error': '百度OCR服务不可用，请先配置百度API密钥'
-        }
+        return _empty_ocr_result(
+            raw_text='',
+            error='百度OCR服务不可用，请先配置百度API密钥'
+        )
 
 def ocr_recognize(image_data: str) -> dict:
     print('[后端-OCR] [入口] 调用 ocr_recognize 函数')
