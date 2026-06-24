@@ -1,5 +1,4 @@
 import logging
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.core.parameter_extractor import validate_and_convert
@@ -74,8 +73,8 @@ async def convert_stl(request: STLConvertRequest):
             )
         )
     except Exception as e:
-        logger.exception("STL convert failed")
-        raise HTTPException(status_code=500, detail="STL转换失败，请稍后重试")
+        logger.exception("STL convert failed: %s", e)
+        raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
 
 def generate_operations_from_stl(stl_base64: str) -> list:
     operations = [

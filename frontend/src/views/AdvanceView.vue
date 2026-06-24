@@ -160,6 +160,11 @@ const handleStlSelect = (event) => {
     reader.onload = (e) => {
       stlFile.value = e.target?.result.split(',')[1] || ''
     }
+    reader.onerror = () => {
+      console.error('[前端-高级] STL文件读取失败:', reader.error)
+      alert('STL文件读取失败，请重试')
+      stlFileName.value = ''
+    }
     reader.readAsDataURL(file)
   }
 }
@@ -171,6 +176,11 @@ const handleStlDrop = (event) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       stlFile.value = e.target?.result.split(',')[1] || ''
+    }
+    reader.onerror = () => {
+      console.error('[前端-高级] STL拖拽文件读取失败:', reader.error)
+      alert('STL文件读取失败，请重试')
+      stlFileName.value = ''
     }
     reader.readAsDataURL(file)
   }

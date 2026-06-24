@@ -452,6 +452,10 @@ const handleFile = (file) => {
   reader.onload = (e) => {
     uploadedImage.value = e.target.result
   }
+  reader.onerror = () => {
+    console.error('[前端] 文件读取失败:', reader.error)
+    alert('文件读取失败，请重试')
+  }
   reader.readAsDataURL(file)
 }
 
@@ -518,7 +522,8 @@ const extractFromImage = async () => {
     alert('信息提取成功！')
   } catch (error) {
     console.error('提取失败:', error)
-    alert('信息提取失败，请重试')
+    const detail = error.response?.data?.detail || error.message || '未知错误'
+    alert(`信息提取失败: ${detail}`)
   } finally {
     extracting.value = false
   }
@@ -572,7 +577,8 @@ const convert = async () => {
       missingFields.value = error.response.data.missing_fields
     } else {
       console.error('转换失败:', error)
-      alert('转换失败，请重试')
+      const detail = error.response?.data?.detail || error.message || '未知错误'
+      alert(`转换失败: ${detail}`)
     }
   } finally {
     loading.value = false

@@ -3,6 +3,7 @@ import json
 import os
 import re
 import requests
+import traceback
 
 from app.utils.config import settings
 
@@ -44,6 +45,7 @@ class OCRProcessor:
         else:
             print('[后端-OCR] [FAIL] 获取访问令牌失败')
             print('[后端-OCR] ============== 百度OCR 初始化失败 ==============\n')
+            self.baidu_client = None
 
     def _get_access_token(self):
         """获取百度OCR访问令牌"""
@@ -379,7 +381,6 @@ class OCRProcessor:
             
         except Exception as e:
             print('[后端-OCR] [FAIL] 百度OCR 识别失败:', str(e))
-            import traceback
             print('[后端-OCR] 错误堆栈:\n', traceback.format_exc())
             return self._fallback_recognize(image_data)
     
@@ -482,9 +483,10 @@ class OCRProcessor:
             
         except Exception as e:
             print('[后端-OCR] [百度OCR] [回退] 通用识别也失败:', str(e))
-            import traceback
             print('[后端-OCR] 错误堆栈:\n', traceback.format_exc())
-            return self._fallback_recognize(base64.b64encode(image_bytes).decode())
+            fallback = self._fallback_recognize(base64.b64encode(image_bytes).decode())
+            fallback['ocr_error'] = f'百度OCR识别失败: {type(e).__name__}: {e}'
+            return fallback
     
     def _ensure_full_fields(self, parsed: dict) -> dict:
         """确保返回结果包含所有必需字段"""
@@ -778,8 +780,8 @@ class OCRProcessor:
                     elif val > 100 and val <= 5000 and not extracted['tool_length']:
                         extracted['tool_length'] = val
                         print(f'[后端-OCR] [解析] 字段[tool_length] = [{val}]')
-                except:
-                    pass
+                except (ValueError, TypeError):
+                    print(f'[后端-OCR] [解析] 无法将 [{num}] 转换为数字，跳过')
         
         extracted['steps'] = self._extract_steps(all_words)
         
@@ -1321,50 +1323,50 @@ class OCRProcessor:
                     if len(cell_texts) > 3 and cell_texts[3].strip():
                         try:
                             spindle_speed = float(cell_texts[3].strip())
-                        except:
-                            pass
+                        except (ValueError, TypeError):
+                            print(f'[后端-OCR] [表格解析] 工步{sequence}: 主轴转速解析失败，值=[{cell_texts[3].strip()}]')
                     
                     cutting_speed = None
                     if len(cell_texts) > 4 and cell_texts[4].strip():
                         try:
                             cutting_speed = float(cell_texts[4].strip())
-                        except:
-                            pass
+                        except (ValueError, TypeError):
+                            print(f'[后端-OCR] [表格解析] 工步{sequence}: 切削速度解析失败，值=[{cell_texts[4].strip()}]')
                     
                     feed_rate = None
                     if len(cell_texts) > 5 and cell_texts[5].strip():
                         try:
                             feed_rate = float(cell_texts[5].strip())
-                        except:
-                            pass
+                        except (ValueError, TypeError):
+                            print(f'[后端-OCR] [表格解析] 工步{sequence}: 进给量解析失败，值=[{cell_texts[5].strip()}]')
                     
                     depth_of_cut = None
                     if len(cell_texts) > 6 and cell_texts[6].strip():
                         try:
                             depth_of_cut = float(cell_texts[6].strip())
-                        except:
-                            pass
+                        except (ValueError, TypeError):
+                            print(f'[后端-OCR] [表格解析] 工步{sequence}: 被吃刀量解析失败，值=[{cell_texts[6].strip()}]')
                     
                     feed_count = None
                     if len(cell_texts) > 7 and cell_texts[7].strip():
                         try:
                             feed_count = int(cell_texts[7].strip())
-                        except:
-                            pass
+                        except (ValueError, TypeError):
+                            print(f'[后端-OCR] [表格解析] 工步{sequence}: 进给次数解析失败，值=[{cell_texts[7].strip()}]')
                     
                     machine_time = None
                     if len(cell_texts) > 8 and cell_texts[8].strip():
                         try:
                             machine_time = float(cell_texts[8].strip())
-                        except:
-                            pass
+                        except (ValueError, TypeError):
+                            print(f'[后端-OCR] [表格解析] 工步{sequence}: 机动工时解析失败，值=[{cell_texts[8].strip()}]')
                     
                     auxiliary_time = None
                     if len(cell_texts) > 9 and cell_texts[9].strip():
                         try:
                             auxiliary_time = float(cell_texts[9].strip())
-                        except:
-                            pass
+                        except (ValueError, TypeError):
+                            print(f'[后端-OCR] [表格解析] 工步{sequence}: 辅助工时解析失败，值=[{cell_texts[9].strip()}]')
                     
                     # 添加到steps（兼容旧格式）
                     result['steps'].append({

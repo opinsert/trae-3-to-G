@@ -196,6 +196,7 @@ npm run dev
 | 2026-05-16 | AI Assistant | 修复参数识别bug：1) 使用正则表达式更灵活匹配各种格式；2) 支持**和|分隔符；3) 优化参数提取逻辑 | - | 修复参数无法正确识别的问题 | NaturalLanguageInput.vue |
 | 2026-05-16 | AI Assistant | 更新后端参数提取和添加调试日志：1) 更新后端正则匹配逻辑；2) 添加详细调试日志 | - | 修复后端参数提取问题，便于调试 | parameter_extractor.py, natural_language.py, NaturalLanguageInput.vue |
 | 2026-05-16 | AI Assistant | OCR引擎替换与功能增强：1) 将PaddleOCR替换为Tesseract OCR解决兼容性问题；2) 添加详细的日志打印功能（前后端）；3) 修复React数组渲染错误（#185）；4) 增强操作步骤验证逻辑；5) 添加多种加工方式支持（平面铣削、轮廓铣削、钻孔、攻丝等10种） | - | 解决PaddleOCR安装问题，提升OCR识别稳定性，增强代码质量和可维护性 | ocr_processor.py, DrawingUpload.vue, gcode_generator.py |
+| 2026-06-24 | AI Assistant | 错误处理增强：1) 将ocr_processor.py中8处裸异常捕获替换为具体异常类型；2) 修复parameter_extractor.py中DeepSeek回退静默丢失错误上下文问题；3) API端点异常处理添加类型信息和堆栈跟踪；4) 前端添加FileReader.onerror处理和错误详情反馈 | - | 消除静默失败，确保错误正确传播和反馈给用户 | ocr_processor.py, parameter_extractor.py, drawing.py, stl.py, natural_language.py, advance.py, DrawingUpload.vue, StlUpload.vue, NaturalLanguageInput.vue, AdvanceView.vue |
 
 ## 十二、注意事项
 

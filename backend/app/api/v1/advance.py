@@ -1,5 +1,4 @@
 import logging
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.models.schemas import AdvanceResponse, ProcessCard
@@ -30,7 +29,7 @@ async def generate_drawing(request: GenerateDrawingRequest):
                     'sequence': 2,
                     'content': '加工操作',
                     'parameters': 'X=100, Y=100, Z=-5, F=120',
-                    'equipment': request.process_card.tool_info.name
+                    'equipment': request.process_card.tool_info.name if request.process_card.tool_info else ''
                 },
                 {
                     'sequence': 3,
@@ -41,7 +40,15 @@ async def generate_drawing(request: GenerateDrawingRequest):
             ]
             
             for idx, op in enumerate(operations, 1):
-                gcode_segment = f"G00 X{op['parameters'].split(',')[0].split('=')[1]} Y{op['parameters'].split(',')[1].split('=')[1]}\nG01 Z{op['parameters'].split(',')[2].split('=')[1]} F120"
+                try:
+                    parts = op['parameters'].split(',')
+                    x_val = parts[0].split('=')[1] if len(parts) > 0 and '=' in parts[0] else '0'
+                    y_val = parts[1].split('=')[1] if len(parts) > 1 and '=' in parts[1] else '0'
+                    z_val = parts[2].split('=')[1] if len(parts) > 2 and '=' in parts[2] else '0'
+                except (IndexError, KeyError) as e:
+                    print(f'[绘图生成] 工步{idx}参数解析失败: {e}，使用默认值')
+                    x_val, y_val, z_val = '0', '0', '0'
+                gcode_segment = f"G00 X{x_val} Y{y_val}\nG01 Z{z_val} F120"
                 
                 drawings.append({
                     'step': idx,
@@ -57,5 +64,5 @@ async def generate_drawing(request: GenerateDrawingRequest):
             }
         )
     except Exception as e:
-        logger.exception("generate drawing failed")
-        raise HTTPException(status_code=500, detail="图纸生成失败，请稍后重试")
+        logger.exception("generate drawing failed: %s", e)
+        raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
