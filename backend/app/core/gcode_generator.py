@@ -106,32 +106,54 @@ class GCodeGenerator:
         else:
             self._generate_circle_milling_from_card()
     
+    def _extract_numeric(self, text, patterns, default):
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return float(match.group(1))
+        return default
+
     def _extract_hole_diameter(self, text):
-        match = re.search(r'[\u03A6Φ]?(\d+(\.\d+)?)[\s]*mm', text)
-        if match:
-            return float(match.group(1))
-        match = re.search(r'圆孔[\s]*(\d+(\.\d+)?)', text)
-        if match:
-            return float(match.group(1))
-        return 10.0
+        return self._extract_numeric(text, [
+            r'[\u03A6Φ]?(\d+(\.\d+)?)[\s]*mm',
+            r'圆孔[\s]*(\d+(\.\d+)?)'
+        ], 10.0)
     
     def _extract_hole_depth(self, text):
-        match = re.search(r'深度[\s]*[\u03A6Φ]?(\d+(\.\d+)?)[\s]*mm', text)
-        if match:
-            return float(match.group(1))
-        match = re.search(r'深[\s]*(\d+(\.\d+)?)[\s]*mm', text)
-        if match:
-            return float(match.group(1))
-        return 5.0
+        return self._extract_numeric(text, [
+            r'深度[\s]*[\u03A6Φ]?(\d+(\.\d+)?)[\s]*mm',
+            r'深[\s]*(\d+(\.\d+)?)[\s]*mm'
+        ], 5.0)
     
     def _extract_workpiece_size(self, text):
         match = re.search(r'(\d+(\.\d+)?)[\s]*[×xX×][\s]*(\d+(\.\d+)?)[\s]*mm', text)
         if match:
             return (float(match.group(1)), float(match.group(3)))
         return (50.0, 50.0)
+
+    def _extract_card_params(self):
+        text = f"{self.process_card.product_name} {self.process_card.process_name}"
+        hole_diameter = self._extract_hole_diameter(text)
+        hole_depth = self._extract_hole_depth(text)
+        width, height = self._extract_workpiece_size(text)
+        return text, hole_diameter, hole_depth, width / 2.0, height / 2.0
+
+    def _add_tool_change_block(self, x, y, cycle_line):
+        self.gcode_lines.append("M05")
+        self.gcode_lines.append("T02 M06")
+        self.gcode_lines.append("G43 H02 Z50.0")
+        self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f}")
+        self.gcode_lines.append("G01 Z2.0 F500")
+        self.gcode_lines.append(cycle_line)
+        self.gcode_lines.append("G80")
+        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append("T01 M06")
+        self.gcode_lines.append("G43 H01 Z50.0")
+        self.gcode_lines.append("M03 S3000")
     
     def _generate_face_milling_from_card(self):
         text = f"{self.process_card.product_name} {self.process_card.process_name} {self.process_card.material}"
+        # face milling uses full text including material for size extraction
         width, height = self._extract_workpiece_size(text)
         tool_diameter = self.process_card.tool_info.diameter if self.process_card.tool_info else 16.0
         
@@ -154,26 +176,14 @@ class GCodeGenerator:
         self.gcode_lines.append("G00 Z50.0")
     
     def _generate_circle_milling_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        hole_depth = self._extract_hole_depth(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
-        tool_diameter = process_card.tool_info.diameter if process_card.tool_info else 8.0
+        _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
+        tool_diameter = self.process_card.tool_info.diameter if self.process_card.tool_info else 8.0
         
         self.gcode_lines.append(f"; 铣圆孔 - 直径:{hole_diameter}mm, 深度:{hole_depth}mm")
         self._generate_circle_milling_code(x_pos, y_pos, hole_diameter, hole_depth, tool_diameter)
     
     def _generate_drilling_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        hole_depth = self._extract_hole_depth(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
+        _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
         
         self.gcode_lines.append(f"; 钻孔 - 直径:{hole_diameter}mm, 深度:{hole_depth}mm")
         self.gcode_lines.append(f"G00 X{x_pos:.3f} Y{y_pos:.3f}")
@@ -183,78 +193,22 @@ class GCodeGenerator:
         self.gcode_lines.append("G00 Z50.0")
     
     def _generate_tapping_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        hole_depth = self._extract_hole_depth(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
-        
+        _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
         self.gcode_lines.append(f"; 攻丝 - M{hole_diameter}")
-        self.gcode_lines.append("M05")
-        self.gcode_lines.append("T02 M06")
-        self.gcode_lines.append("G43 H02 Z50.0")
-        self.gcode_lines.append(f"G00 X{x_pos:.3f} Y{y_pos:.3f}")
-        self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append(f"G84 Z{hole_depth * -1:.3f} R2.0 F{hole_diameter * 50}")
-        self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
-        self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0")
-        self.gcode_lines.append("M03 S3000")
+        self._add_tool_change_block(x_pos, y_pos, f"G84 Z{hole_depth * -1:.3f} R2.0 F{hole_diameter * 50}")
     
     def _generate_reaming_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        hole_depth = self._extract_hole_depth(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
-        
+        _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
         self.gcode_lines.append(f"; 铰孔 - 直径:{hole_diameter}mm")
-        self.gcode_lines.append("M05")
-        self.gcode_lines.append("T02 M06")
-        self.gcode_lines.append("G43 H02 Z50.0")
-        self.gcode_lines.append(f"G00 X{x_pos:.3f} Y{y_pos:.3f}")
-        self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append(f"G85 Z{hole_depth * -1:.3f} R2.0 F20")
-        self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
-        self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0")
-        self.gcode_lines.append("M03 S3000")
+        self._add_tool_change_block(x_pos, y_pos, f"G85 Z{hole_depth * -1:.3f} R2.0 F20")
     
     def _generate_boring_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        hole_depth = self._extract_hole_depth(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
-        
+        _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
         self.gcode_lines.append(f"; 镗孔 - 直径:{hole_diameter}mm, 深度:{hole_depth}mm")
-        self.gcode_lines.append("M05")
-        self.gcode_lines.append("T02 M06")
-        self.gcode_lines.append("G43 H02 Z50.0")
-        self.gcode_lines.append(f"G00 X{x_pos:.3f} Y{y_pos:.3f}")
-        self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append(f"G86 Z{hole_depth * -1:.3f} R2.0 F30")
-        self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
-        self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0")
-        self.gcode_lines.append("M03 S3000")
+        self._add_tool_change_block(x_pos, y_pos, f"G86 Z{hole_depth * -1:.3f} R2.0 F30")
     
     def _generate_chamfering_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
+        _, hole_diameter, _, x_pos, y_pos = self._extract_card_params()
         
         self.gcode_lines.append("; 倒角")
         self.gcode_lines.append(f"G00 X{x_pos:.3f} Y{y_pos:.3f}")
@@ -270,13 +224,7 @@ class GCodeGenerator:
         self.gcode_lines.append("G00 Z50.0")
     
     def _generate_thread_milling_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        hole_depth = self._extract_hole_depth(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
+        _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
         pitch = 1.5
         
         self.gcode_lines.append(f"; 螺纹铣削 - M{hole_diameter}x{pitch}")
@@ -295,13 +243,7 @@ class GCodeGenerator:
         self.gcode_lines.append("G00 Z50.0")
     
     def _generate_deep_hole_drilling_from_card(self):
-        process_card = self.process_card
-        text = f"{process_card.product_name} {process_card.process_name}"
-        hole_diameter = self._extract_hole_diameter(text)
-        hole_depth = self._extract_hole_depth(text)
-        width, height = self._extract_workpiece_size(text)
-        x_pos = width / 2.0
-        y_pos = height / 2.0
+        _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
         peck_depth = 10.0
         
         self.gcode_lines.append(f"; 深孔钻 - 直径:{hole_diameter}mm, 深度:{hole_depth}mm")
@@ -407,17 +349,7 @@ class GCodeGenerator:
         pitch = params.get('P', 1.0)
         
         self.gcode_lines.append("; 攻丝")
-        self.gcode_lines.append("M05")
-        self.gcode_lines.append("T02 M06")
-        self.gcode_lines.append("G43 H02 Z50.0")
-        self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f}")
-        self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append(f"G84 Z{depth:.3f} R2.0 F{pitch * 50}")
-        self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
-        self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0")
-        self.gcode_lines.append("M03 S3000")
+        self._add_tool_change_block(x, y, f"G84 Z{depth:.3f} R2.0 F{pitch * 50}")
     
     def _generate_reaming(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -427,17 +359,7 @@ class GCodeGenerator:
         feed = params.get('F', 20)
         
         self.gcode_lines.append("; 铰孔")
-        self.gcode_lines.append("M05")
-        self.gcode_lines.append("T02 M06")
-        self.gcode_lines.append("G43 H02 Z50.0")
-        self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f}")
-        self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append(f"G85 Z{depth:.3f} R2.0 F{feed}")
-        self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
-        self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0")
-        self.gcode_lines.append("M03 S3000")
+        self._add_tool_change_block(x, y, f"G85 Z{depth:.3f} R2.0 F{feed}")
     
     def _generate_boring(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -447,17 +369,7 @@ class GCodeGenerator:
         feed = params.get('F', 30)
         
         self.gcode_lines.append("; 镗孔")
-        self.gcode_lines.append("M05")
-        self.gcode_lines.append("T02 M06")
-        self.gcode_lines.append("G43 H02 Z50.0")
-        self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f}")
-        self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append(f"G86 Z{depth:.3f} R2.0 F{feed}")
-        self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
-        self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0")
-        self.gcode_lines.append("M03 S3000")
+        self._add_tool_change_block(x, y, f"G86 Z{depth:.3f} R2.0 F{feed}")
     
     def _generate_chamfering(self, op: Operation):
         params = self._parse_parameters(op.parameters)
