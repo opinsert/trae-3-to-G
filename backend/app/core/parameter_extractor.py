@@ -1,4 +1,5 @@
 import json
+import traceback
 import aiohttp
 from app.models.schemas import ProcessCard, ToolInfo, Operation
 from app.utils.config import settings
@@ -21,8 +22,11 @@ class ParameterExtractor:
         try:
             return await self._extract_with_deepseek(text)
         except Exception as e:
-            print(f"DeepSeek API调用失败，使用本地解析: {e}")
-            return self._fallback_extract(text)
+            print(f"DeepSeek API调用失败，使用本地解析: {type(e).__name__}: {e}")
+            print(f"DeepSeek 错误堆栈:\n{traceback.format_exc()}")
+            fallback = self._fallback_extract(text)
+            fallback['_deepseek_error'] = f'{type(e).__name__}: {e}'
+            return fallback
     
     async def _extract_with_deepseek(self, text: str) -> dict:
         headers = {
@@ -77,11 +81,15 @@ class ParameterExtractor:
                 response.raise_for_status()
                 result = await response.json()
         
-        content = result['choices'][0]['message']['content']
+        try:
+            content = result['choices'][0]['message']['content']
+        except (KeyError, IndexError) as e:
+            raise ValueError(f"DeepSeek API 响应格式异常，缺少必要字段: {e}") from e
         
         try:
             return json.loads(content)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"DeepSeek 返回内容无法解析为JSON: {e}\n内容前200字符: {content[:200]}")
             return self._fallback_extract(text)
     
     def _fallback_extract(self, text: str) -> dict:
@@ -115,9 +123,13 @@ class ParameterExtractor:
         
         try:
             result['tool_length'] = float(result['tool_length']) if result['tool_length'] else 0
-            result['tool_diameter'] = float(result['tool_diameter']) if result['tool_diameter'] else 0
-        except ValueError:
+        except (ValueError, TypeError):
+            print(f"[参数提取] tool_length 值无法转换为数字: [{result['tool_length']}]，默认为0")
             result['tool_length'] = 0
+        try:
+            result['tool_diameter'] = float(result['tool_diameter']) if result['tool_diameter'] else 0
+        except (ValueError, TypeError):
+            print(f"[参数提取] tool_diameter 值无法转换为数字: [{result['tool_diameter']}]，默认为0")
             result['tool_diameter'] = 0
         
         return result
@@ -155,7 +167,7 @@ class ParameterExtractor:
                             'remark': ''
                         })
                     except ValueError:
-                        pass
+                        print(f'[参数提取] 工序行解析失败，无法解析序号: [{parts[0].strip()}]')
         
         return operations
     
