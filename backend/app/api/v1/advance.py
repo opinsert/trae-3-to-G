@@ -1,6 +1,10 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.models.schemas import AdvanceResponse, ProcessCard
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -53,4 +57,5 @@ async def generate_drawing(request: GenerateDrawingRequest):
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("generate drawing failed")
+        raise HTTPException(status_code=500, detail="图纸生成失败，请稍后重试")

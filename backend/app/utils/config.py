@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     port: int = 8000
     app_name: str = "GCode Converter"
     app_version: str = "1.0.0"
-    debug: bool = True
+    debug: bool = False
     data_dir: str = "app/data"
     secret_key: str = ""
     algorithm: str = "HS256"

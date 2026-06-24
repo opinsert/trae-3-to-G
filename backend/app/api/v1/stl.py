@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.core.parameter_extractor import validate_and_convert
 from app.core.gcode_generator import generate_gcode
 from app.core.gcode_validator import validate_gcode
 from app.models.schemas import ConvertResponse, ConvertData, ProcessCard
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -70,7 +74,8 @@ async def convert_stl(request: STLConvertRequest):
             )
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("STL convert failed")
+        raise HTTPException(status_code=500, detail="STL转换失败，请稍后重试")
 
 def generate_operations_from_stl(stl_base64: str) -> list:
     operations = [
