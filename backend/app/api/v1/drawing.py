@@ -1,11 +1,9 @@
 import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.core.parameter_extractor import validate_and_convert
-from app.core.gcode_generator import generate_gcode
-from app.core.gcode_validator import validate_gcode
 from app.core.ocr_processor import ocr_recognize
-from app.models.schemas import ConvertResponse, ConvertData, ProcessCard, Operation
+from app.models.schemas import ConvertResponse, ConvertData, ProcessCard
+from app.utils.conversion import process_card_to_params, convert_params_to_gcode
 
 logger = logging.getLogger(__name__)
 
@@ -21,52 +19,8 @@ class DrawingConvertRequest(BaseModel):
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_drawing(request: DrawingConvertRequest):
     try:
-        print(f"收到转换请求: {request}")
-        
-        params = {
-            'product_name': request.process_card.product_name or '',
-            'process_name': request.process_card.process_name or '',
-            'process_number': request.process_card.process_number or '',
-            'version': request.process_card.version or '',
-            'equipment': request.process_card.equipment or '',
-            'control_system': request.process_card.control_system or '',
-            'fixture': request.process_card.fixture or '',
-            'material': request.process_card.material or '',
-            'tool_name': request.process_card.tool_info.name if request.process_card.tool_info else '',
-            'tool_length': request.process_card.tool_info.length if request.process_card.tool_info else 0,
-            'tool_diameter': request.process_card.tool_info.diameter if request.process_card.tool_info else 0,
-            'operations': request.steps or []
-        }
-        
-        print(f"参数转换完成: {params}")
-        
-        result, missing = validate_and_convert(params)
-        if missing:
-            print(f"缺失字段: {missing}")
-            return ConvertResponse(
-                success=False,
-                message="参数不完整",
-                missing_fields=missing
-            )
-        
-        process_card, operations = result
-        print(f"ProcessCard: {process_card}")
-        print(f"Operations: {operations}")
-        
-        gcode = generate_gcode(process_card, operations)
-        validation = validate_gcode(gcode)
-        
-        print("转换成功")
-        return ConvertResponse(
-            success=True,
-            message="转换成功",
-            data=ConvertData(
-                process_card=process_card,
-                operations=operations,
-                gcode=gcode,
-                validation=validation
-            )
-        )
+        params = process_card_to_params(request.process_card, request.steps)
+        return convert_params_to_gcode(params)
     except Exception as e:
         logger.exception("drawing convert failed: %s", e)
         raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
@@ -89,36 +43,7 @@ async def ocr_extract(request: DrawingRequest):
 async def ocr_convert(request: DrawingRequest):
     try:
         extracted_data = ocr_recognize(request.image)
-        
-        result, missing = validate_and_convert(extracted_data)
-        
-        if missing:
-            return ConvertResponse(
-                success=False,
-                message="OCR识别完成，但参数不完整",
-                missing_fields=missing,
-                data=ConvertData(
-                    process_card=None,
-                    operations=[],
-                    gcode="",
-                    validation=None
-                )
-            )
-        
-        process_card, operations = result
-        gcode = generate_gcode(process_card, operations)
-        validation = validate_gcode(gcode)
-        
-        return ConvertResponse(
-            success=True,
-            message="OCR识别并转换成功",
-            data=ConvertData(
-                process_card=process_card,
-                operations=operations,
-                gcode=gcode,
-                validation=validation
-            )
-        )
+        return convert_params_to_gcode(extracted_data, fail_message="OCR识别完成，但参数不完整")
     except Exception as e:
         logger.exception("OCR convert failed: %s", e)
         raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
