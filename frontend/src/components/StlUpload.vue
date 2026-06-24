@@ -131,6 +131,11 @@ const processFile = async (file) => {
     stlFile.value = e.target.result.split(',')[1] || ''
     await fetchOperations()
   }
+  reader.onerror = () => {
+    console.error('[前端-STL] 文件读取失败:', reader.error)
+    alert('STL文件读取失败，请重试')
+    stlFileName.value = ''
+  }
   reader.readAsDataURL(file)
 
   // 3D preview

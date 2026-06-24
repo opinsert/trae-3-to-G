@@ -1,5 +1,4 @@
 import logging
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.core.parameter_extractor import extract_parameters, validate_and_convert, REQUIRED_FIELDS
@@ -42,8 +41,8 @@ async def precheck_natural_language(request: NaturalLanguageRequest):
             missing_fields=missing_fields
         )
     except Exception as e:
-        logger.exception("precheck failed")
-        raise HTTPException(status_code=500, detail="参数预检失败，请稍后重试")
+        logger.exception("precheck failed: %s", e)
+        raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
 
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_natural_language(request: NaturalLanguageRequest):
@@ -82,5 +81,5 @@ async def convert_natural_language(request: NaturalLanguageRequest):
             )
         )
     except Exception as e:
-        logger.exception("conversion failed")
-        raise HTTPException(status_code=500, detail="转换失败，请稍后重试")
+        logger.exception("conversion failed: %s", e)
+        raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')

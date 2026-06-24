@@ -178,11 +178,14 @@ const handleConvert = async () => {
       console.log('转换成功，数据:', response.data.data)
       emit('convert', response.data.data)
     } else {
-      console.log('参数不完整，缺失字段:', response.data.missing_fields)
+      const missing = response.data.missing_fields || []
+      console.log('参数不完整，缺失字段:', missing)
+      alert(`转换失败: ${response.data.message || '参数不完整'}\n缺失字段: ${missing.join(', ') || '未知'}`)
     }
   } catch (error) {
     console.error('转换失败:', error)
-    alert('转换失败，请检查输入内容')
+    const detail = error.response?.data?.detail || error.message || '未知错误'
+    alert(`转换失败: ${detail}`)
   } finally {
     loading.value = false
   }
