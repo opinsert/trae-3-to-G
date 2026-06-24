@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.core.parameter_extractor import validate_and_convert
@@ -5,6 +7,8 @@ from app.core.gcode_generator import generate_gcode
 from app.core.gcode_validator import validate_gcode
 from app.core.ocr_processor import ocr_recognize
 from app.models.schemas import ConvertResponse, ConvertData, ProcessCard, Operation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -65,8 +69,8 @@ async def convert_drawing(request: DrawingConvertRequest):
             )
         )
     except Exception as e:
-        print(f"转换异常: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("drawing convert failed")
+        raise HTTPException(status_code=500, detail="工序图转换失败，请稍后重试")
 
 @router.post("/ocr-extract")
 async def ocr_extract(request: DrawingRequest):
@@ -79,7 +83,8 @@ async def ocr_extract(request: DrawingRequest):
             "data": extracted_data
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("OCR extract failed")
+        raise HTTPException(status_code=500, detail="OCR识别失败，请稍后重试")
 
 @router.post("/ocr-convert", response_model=ConvertResponse)
 async def ocr_convert(request: DrawingRequest):
@@ -116,4 +121,5 @@ async def ocr_convert(request: DrawingRequest):
             )
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("OCR convert failed")
+        raise HTTPException(status_code=500, detail="OCR转换失败，请稍后重试")

@@ -1,6 +1,8 @@
 fastapi>=0.104.0
 uvicorn>=0.24.0
 pydantic>=2.6.0
+pydantic-settings>=2.1.0
+aiohttp>=3.9.0
 trimesh>=3.22.0
 Pillow>=10.2.0
 matplotlib>=3.8.0

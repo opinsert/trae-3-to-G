@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 from app.models.schemas import ExampleListResponse
 from app.core.example_manager import get_all_examples, get_example, get_examples_by_category
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -17,7 +21,8 @@ async def list_examples(category: Optional[str] = None):
             data=examples
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("list examples failed")
+        raise HTTPException(status_code=500, detail="获取示例列表失败")
 
 @router.get("/{example_id}")
 async def get_example_endpoint(example_id: int):
@@ -32,7 +37,8 @@ async def get_example_endpoint(example_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get example failed")
+        raise HTTPException(status_code=500, detail="获取示例失败")
 
 @router.get("/categories")
 async def get_categories():
@@ -43,4 +49,5 @@ async def get_categories():
             "data": categories
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("get categories failed")
+        raise HTTPException(status_code=500, detail="获取分类失败")
