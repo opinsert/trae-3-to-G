@@ -1,7 +1,7 @@
 from app.core.parameter_extractor import validate_and_convert
 from app.core.gcode_generator import generate_gcode
 from app.core.gcode_validator import validate_gcode
-from app.models.schemas import ConvertResponse, ConvertData, ProcessCard
+from app.models.schemas import ConvertResponse, ConvertData, ProcessCard, ValidationResult
 
 
 def process_card_to_params(process_card: ProcessCard, operations: list = None) -> dict:
@@ -38,7 +38,7 @@ def validate_params(params: dict, fail_message: str = "参数不完整") -> Conv
             process_card=process_card,
             operations=operations,
             gcode='',
-            validation=None
+            validation=ValidationResult(valid=False, errors=[], warnings=[])
         )
     )
 

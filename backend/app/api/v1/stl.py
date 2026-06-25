@@ -3,53 +3,94 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.models.schemas import ConvertResponse, ProcessCard
 from app.utils.conversion import process_card_to_params, convert_params_to_gcode, validate_params
+from app.core.stl_analyzer import analyze_stl, analyze_all_directions, plan_operations
+from app.core.process_planner import plan_with_deepseek, plan_directions_with_deepseek
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
 
 class STLConvertRequest(BaseModel):
     stl_file: str
     process_card: ProcessCard
     generate_gcode: bool = False
     operations: list = []
+    direction: str = '+Z'
+
+
+class DirectionPlanResponse(BaseModel):
+    success: bool = True
+    directions: dict = {}
+    recommended_order: list = []
+    skip_reasons: dict = {}
+    explanation: str = ''
+
 
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_stl(request: STLConvertRequest):
+    """Single-direction STL → G-code conversion."""
     try:
-        ops = request.operations if request.operations else generate_operations_from_stl(request.stl_file)
+        ops = request.operations if request.operations else await generate_operations_from_stl(
+            request.stl_file, request.process_card, request.direction
+        )
         params = process_card_to_params(request.process_card, ops)
 
         if not request.generate_gcode:
             return validate_params(params)
-
         return convert_params_to_gcode(params)
+    except ValueError as e:
+        logger.warning("STL分析失败: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("STL convert failed: %s", e)
         raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
 
-def generate_operations_from_stl(stl_base64: str) -> list:
-    operations = [
-        {
-            'sequence': 1,
-            'content': '快速定位到加工起点',
-            'parameters': 'X=0, Y=0, Z=50',
-            'equipment': 'CNC加工中心',
-            'remark': ''
-        },
-        {
-            'sequence': 2,
-            'content': 'STL模型加工',
-            'parameters': 'X=100, Y=100, Z=-5, F=120',
-            'equipment': '立铣刀',
-            'remark': '根据STL模型生成的加工路径'
-        },
-        {
-            'sequence': 3,
-            'content': '返回安全高度',
-            'parameters': 'Z=50',
-            'equipment': 'CNC加工中心',
-            'remark': ''
+
+@router.post("/plan-directions")
+async def plan_directions(request: STLConvertRequest):
+    """Analyze all 6 directions and return machining plan."""
+    try:
+        all_dirs = analyze_all_directions(request.stl_file)
+        card_dict = _extract_card(request.process_card)
+        tool_dia = _extract_tool_diameter(request.process_card)
+
+        plan = await plan_directions_with_deepseek(all_dirs['directions'], card_dict, tool_dia)
+
+        return {
+            'success': True,
+            'directions': all_dirs['directions'],
+            'recommended_order': plan['recommended_order'],
+            'skip_reasons': plan.get('skip_reasons', {}),
+            'explanation': plan['explanation'],
         }
-    ]
-    return operations
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("方向规划失败: %s", e)
+        raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
+
+
+async def generate_operations_from_stl(
+    stl_base64: str, process_card: ProcessCard = None, direction: str = '+Z'
+) -> list:
+    """Analyze STL for one direction and generate operations."""
+    geom = analyze_stl(stl_base64)
+    tool_dia = _extract_tool_diameter(process_card)
+    card_dict = _extract_card(process_card)
+
+    plan = await plan_with_deepseek(geom, card_dict, tool_dia)
+    logger.info("工序生成: %d条 (%s) [%s]", len(plan['operations']), plan['source'], direction)
+    return plan['operations']
+
+
+def _extract_card(pc) -> dict:
+    if pc is None:
+        return {}
+    return pc.model_dump() if hasattr(pc, 'model_dump') else (pc.dict() if hasattr(pc, 'dict') else {})
+
+
+def _extract_tool_diameter(pc) -> float:
+    if pc and pc.tool_info and pc.tool_info.diameter:
+        return float(pc.tool_info.diameter)
+    return 10.0

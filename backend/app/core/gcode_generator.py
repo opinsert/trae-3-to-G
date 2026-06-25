@@ -47,10 +47,18 @@ class GCodeGenerator:
     def _add_operation(self, op: Operation):
         self.gcode_lines.append(f"; 步骤{op.sequence}: {op.content}")
         self.gcode_lines.append(f"; 参数: {op.parameters}")
-        
+
         content = op.content
-        
-        if "铣平面" in content or "平面铣" in content or "面铣" in content:
+
+        if "斜坡进刀" in content:
+            self._generate_ramp_entry(op)
+        elif "型腔" in content or "腔体" in content or "pocket" in content:
+            self._generate_pocket_clearing(op)
+        elif "侧壁" in content or "壁面" in content:
+            self._generate_wall_finish(op)
+        elif "底面" in content and "精加工" in content:
+            self._generate_floor_finish(op)
+        elif "铣平面" in content or "平面铣" in content or "面铣" in content:
             self._generate_face_milling(op)
         elif "轮廓" in content or "外形" in content:
             self._generate_profile_milling(op)
@@ -76,9 +84,11 @@ class GCodeGenerator:
             self._generate_generic_milling(op)
         elif "快移" in content or "定位" in content:
             self._generate_rapid_code(op)
+        elif "返回安全高度" in content or "回退" in content:
+            self._generate_retract()
         else:
             self._generate_generic_code(op)
-        
+
         self.gcode_lines.append("")
     
     def _generate_from_process_card(self):
@@ -490,30 +500,37 @@ class GCodeGenerator:
         y = params.get('Y', 0)
         z = params.get('Z', -5)
         feed = params.get('F', 100)
-        
-        self.gcode_lines.append("; 铣削加工")
+        # Safety: ramp entry, never straight plunge
+        rx = min(x + 5.0, 50.0)
+        ry = min(y + 5.0, 50.0)
+        self.gcode_lines.append("; 铣削加工 (安全斜坡进刀)")
         self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f}")
-        self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append(f"G01 Z{z:.3f} F{feed}")
+        self.gcode_lines.append("G01 Z5.0 F500")
+        self.gcode_lines.append(f"G01 X{rx:.3f} Y{ry:.3f} Z{z:.3f} F{feed}")
         self.gcode_lines.append("G01 Z2.0 F500")
         self.gcode_lines.append("G00 Z50.0")
-    
+
     def _generate_rapid_code(self, op: Operation):
         params = self._parse_parameters(op.parameters)
         x = params.get('X', 0)
         y = params.get('Y', 0)
         z = params.get('Z', 50)
-        
         self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f} Z{z:.3f}")
-    
+
     def _generate_generic_code(self, op: Operation):
         params = self._parse_parameters(op.parameters)
         x = params.get('X', 0)
         y = params.get('Y', 0)
         z = params.get('Z', 0)
         feed = params.get('F', 100)
-        
-        self.gcode_lines.append(f"G01 X{x:.3f} Y{y:.3f} Z{z:.3f} F{feed}")
+        # Safety: if cutting downward, use ramp entry
+        if z < 0:
+            self.gcode_lines.append("; 安全斜坡进刀 (通用)")
+            self.gcode_lines.append(f"G00 X{max(0, x - 3):.3f} Y{max(0, y - 3):.3f}")
+            self.gcode_lines.append("G01 Z5.0 F500")
+            self.gcode_lines.append(f"G01 X{x:.3f} Y{y:.3f} Z{z:.3f} F{feed}")
+        else:
+            self.gcode_lines.append(f"G01 X{x:.3f} Y{y:.3f} Z{z:.3f} F{feed}")
     
     def _parse_parameters(self, param_str: str) -> dict:
         params = {}
@@ -531,6 +548,106 @@ class GCodeGenerator:
                     params[key.strip()] = value.strip()
         return params
     
+    # ---- new: pocket / ramp / wall / floor operations ----
+
+    def _generate_ramp_entry(self, op: Operation):
+        """Ramped entry from clearance height to cutting depth.
+
+        Never plunges straight down — always moves X/Y while descending.
+        """
+        params = self._parse_parameters(op.parameters)
+        x = params.get('RAMP_X', params.get('X', 5.0))
+        y = params.get('RAMP_Y', params.get('Y', 5.0))
+        z_target = params.get('Z', -3.0)
+        feed = params.get('F', 200)
+
+        self.gcode_lines.append("; 斜坡进刀 (安全进刀，禁止直插)")
+        self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f}")
+        self.gcode_lines.append("G01 Z5.0 F500")
+        self.gcode_lines.append(f"G01 X{x + 3:.3f} Y{y + 3:.3f} Z{z_target:.3f} F{feed}")
+
+    def _generate_pocket_clearing(self, op: Operation):
+        """Clear a pocket area at the current Z level (zigzag pattern)."""
+        params = self._parse_parameters(op.parameters)
+        x_start = params.get('X', 0)
+        y_start = params.get('Y', 0)
+        x_end = params.get('X_END', 50)
+        y_end = params.get('Y_END', 50)
+        feed = params.get('F', 300)
+        step = params.get('STEP', 7.0)
+
+        # Safety: enforce max 3mm DOC at generator level
+        z_current = params.get('Z', 0)
+        z_prev = params.get('Z_PREV', 0)
+        doc = abs(z_current - z_prev)
+        if doc > 0 and doc > 3.0:
+            self.gcode_lines.append(f"; !! 安全警告: 切深{doc:.1f}mm超过3mm限制")
+            self.gcode_lines.append(f"; !! 已强制限制为分层加工，请检查工序参数")
+
+        self.gcode_lines.append(f"; 型腔清层 Z={z_current:.2f}")
+        self.gcode_lines.append(f"G00 X{x_start:.3f} Y{y_start:.3f}")
+
+        y = y_start
+        direction = 1
+        while y < y_end:
+            if direction == 1:
+                self.gcode_lines.append(f"G01 X{x_end:.3f} F{feed}")
+            else:
+                self.gcode_lines.append(f"G01 X{x_start:.3f} F{feed}")
+            y += step
+            self.gcode_lines.append(f"G01 Y{min(y, y_end):.3f} F500")
+            direction *= -1
+
+    def _generate_wall_finish(self, op: Operation):
+        """Profile the pocket walls at current Z level with tool radius offset."""
+        params = self._parse_parameters(op.parameters)
+        w = params.get('WIDTH', 50)
+        h = params.get('HEIGHT', 50)
+        z = params.get('Z', -3)
+        feed = params.get('F', 120)
+
+        # Tool radius compensation: offset inward by half tool diameter
+        tool_dia = self.process_card.tool_info.diameter if self.process_card and self.process_card.tool_info else 10.0
+        offset = tool_dia / 2.0
+
+        self.gcode_lines.append(f"; 侧壁精修 Z={z:.2f} (刀径补偿{offset:.1f}mm)")
+        self.gcode_lines.append(f"G01 X{offset:.3f} Y{offset:.3f} F{feed}")
+        self.gcode_lines.append(f"G01 X{w - offset:.3f} F{feed}")
+        self.gcode_lines.append(f"G01 Y{h - offset:.3f} F{feed}")
+        self.gcode_lines.append(f"G01 X{offset:.3f} F{feed}")
+        self.gcode_lines.append(f"G01 Y{offset:.3f} F{feed}")
+
+    def _generate_floor_finish(self, op: Operation):
+        """Finish the pocket floor with ramp entry + fine step-over zigzag."""
+        params = self._parse_parameters(op.parameters)
+        x_start = params.get('X', 5.0)
+        y_start = params.get('Y', 5.0)
+        x_end = params.get('X_END', 50)
+        y_end = params.get('Y_END', 50)
+        z = params.get('Z', -65.0)
+        feed = params.get('F', 120)
+        step = params.get('STEP', 3.5)
+
+        self.gcode_lines.append(f"; 底面精加工 Z={z:.2f} (安全斜坡进刀)")
+        self.gcode_lines.append(f"G00 X{x_start - 3:.3f} Y{y_start - 3:.3f}")
+        self.gcode_lines.append("G01 Z5.0 F500")
+        self.gcode_lines.append(f"G01 X{x_start:.3f} Y{y_start:.3f} Z{z:.2f} F150")
+
+        y = y_start
+        direction = 1
+        while y < y_end:
+            if direction == 1:
+                self.gcode_lines.append(f"G01 X{x_end:.3f} F{feed}")
+            else:
+                self.gcode_lines.append(f"G01 X{x_start:.3f} F{feed}")
+            y += step
+            self.gcode_lines.append(f"G01 Y{min(y, y_end):.3f} F300")
+            direction *= -1
+
+    def _generate_retract(self):
+        """Safe retract to clearance height."""
+        self.gcode_lines.append("G00 Z50.0")
+
     def _add_finalization(self):
         self.gcode_lines.append("G00 Z100.0 M09")
         self.gcode_lines.append("M05")

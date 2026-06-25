@@ -70,16 +70,16 @@
               <!-- 第二行：输入 -->
               <tr class="border-b border-gray-300">
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.workshop" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.workshop" type="text" placeholder="请输入车间" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.process_card_number" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.process_card_number" type="text" placeholder="请输入工序号" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.process_name" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.process_name" type="text" placeholder="请输入工序名称" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="px-2 py-1">
-                  <input v-model="form.material_grade" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.material_grade" type="text" :placeholder="materialPlaceholder" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
               </tr>
               <!-- 第三行：标签 -->
@@ -92,16 +92,16 @@
               <!-- 第四行：输入 -->
               <tr class="border-b border-gray-300">
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.blank_type" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.blank_type" type="text" placeholder="请输入毛坯种类" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.blank_size" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.blank_size" type="text" :placeholder="blankSizePlaceholder" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model.number="form.blank_available_pieces" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.blank_available_pieces" type="number" :placeholder="blankAvailablePlaceholder" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="px-2 py-1">
-                  <input v-model.number="form.pieces_per_machine" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.pieces_per_machine" type="number" placeholder="每台件数" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
               </tr>
               <!-- 第五行：标签 - 根据格式变化 -->
@@ -114,16 +114,16 @@
               <!-- 第五行：输入 - 格式1 -->
               <tr class="border-b border-gray-300" v-if="formatType === 'type1'">
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.fixture_no" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.fixture_no" type="text" placeholder="请输入夹具编号" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.fixture" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.fixture" type="text" placeholder="请输入夹具名称" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model.number="form.pieces_per_machine" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.pieces_per_machine" type="number" placeholder="每台件数" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="px-2 py-1">
-                  <input v-model="form.cutting_fluid" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.cutting_fluid" type="text" placeholder="请输入切削液" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
               </tr>
               <!-- 第五行：标签 - 格式2 -->
@@ -136,16 +136,16 @@
               <!-- 第五行：输入 - 格式2 -->
               <tr class="border-b border-gray-300" v-if="formatType === 'type2'">
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.equipment" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.equipment" type="text" placeholder="请输入设备名称" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.equipment_model" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.equipment_model" type="text" placeholder="请输入设备型号" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.equipment_no" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.equipment_no" type="text" placeholder="请输入设备编号" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="px-2 py-1">
-                  <input v-model.number="form.simultaneous_pieces" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.simultaneous_pieces" type="number" placeholder="同时加工件数" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
               </tr>
               <!-- 第六行：标签 - 格式1 -->
@@ -157,10 +157,10 @@
               <!-- 第六行：输入 - 格式1 -->
               <tr class="border-b border-gray-300" v-if="formatType === 'type1'">
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.equipment" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.equipment" type="text" placeholder="请输入设备名称" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.equipment_model" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.equipment_model" type="text" placeholder="请输入设备型号" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 bg-gray-100 px-2 py-1 font-medium text-center">准终</td>
                 <td class="bg-gray-100 px-2 py-1 font-medium text-center">单件</td>
@@ -170,10 +170,10 @@
                 <td class="border-r border-gray-300 bg-gray-50 px-2 py-1"></td>
                 <td class="border-r border-gray-300 bg-gray-50 px-2 py-1"></td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model.number="form.preparation_time" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.preparation_time" type="number" placeholder="准终时间" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="px-2 py-1">
-                  <input v-model.number="form.unit_time" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.unit_time" type="number" placeholder="单件时间" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
               </tr>
               <!-- 第六行：标签 - 格式2 -->
@@ -185,13 +185,13 @@
               <!-- 第六行：输入 - 格式2 -->
               <tr v-if="formatType === 'type2'">
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.fixture_no" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.fixture_no" type="text" placeholder="请输入夹具编号" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.fixture" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.fixture" type="text" placeholder="请输入夹具名称" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="px-2 py-1" colspan="2">
-                  <input v-model="form.cutting_fluid" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.cutting_fluid" type="text" placeholder="请输入切削液" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
               </tr>
             </tbody>
@@ -218,16 +218,16 @@
               <!-- 第三行：输入 -->
               <tr>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.station_tool_no" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.station_tool_no" type="text" placeholder="请输入工位器具编号" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model="form.station_tool_name" type="text" class="w-full border-none focus:ring-0" />
+                  <input v-model="form.station_tool_name" type="text" placeholder="请输入工位器具名称" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="border-r border-gray-300 px-2 py-1">
-                  <input v-model.number="form.preparation_time" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.preparation_time" type="number" placeholder="准终时间" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
                 <td class="px-2 py-1">
-                  <input v-model.number="form.unit_time" type="number" class="w-full border-none focus:ring-0" />
+                  <input v-model.number="form.unit_time" type="number" placeholder="单件时间" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
                 </td>
               </tr>
             </tbody>
@@ -264,31 +264,31 @@
             <tr v-for="(step, index) in validSteps" :key="step.step" class="border-b border-gray-200">
               <td class="border-r border-gray-300 px-2 py-1 text-center">{{ step.step }}</td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model="step.step_content" type="text" class="w-full border-none focus:ring-0" />
+                <input v-model="step.step_content" type="text" placeholder="请输入工步内容" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model="step.tooling" type="text" class="w-full border-none focus:ring-0" />
+                <input v-model="step.tooling" type="text" placeholder="请输入工艺装备" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model.number="step.spindle_speed" type="number" class="w-full border-none focus:ring-0" />
+                <input v-model.number="step.spindle_speed" type="number" placeholder="主轴转速" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model.number="step.cutting_speed" type="number" class="w-full border-none focus:ring-0" />
+                <input v-model.number="step.cutting_speed" type="number" placeholder="切削速度" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model.number="step.feed_rate" type="number" class="w-full border-none focus:ring-0" />
+                <input v-model.number="step.feed_rate" type="number" placeholder="进给量" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model.number="step.depth_of_cut" type="number" class="w-full border-none focus:ring-0" />
+                <input v-model.number="step.depth_of_cut" type="number" placeholder="被吃刀量" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model.number="step.feed_count" type="number" class="w-full border-none focus:ring-0" />
+                <input v-model.number="step.feed_count" type="number" placeholder="进给次数" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model.number="step.machine_time" type="number" class="w-full border-none focus:ring-0" />
+                <input v-model.number="step.machine_time" type="number" placeholder="机动时间" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
-                <input v-model.number="step.auxiliary_time" type="number" class="w-full border-none focus:ring-0" />
+                <input v-model.number="step.auxiliary_time" type="number" placeholder="辅助时间" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="px-2 py-1 text-center">
                 <button @click="removeStep(index)" class="text-red-500 hover:text-red-700">删除</button>
@@ -342,27 +342,32 @@ const materialLabel = computed(() => formatType.value === 'type1' ? '材料号' 
 const blankSizeLabel = computed(() => formatType.value === 'type1' ? '外形尺寸' : '毛坯外形尺寸')
 const blankAvailableLabel = computed(() => formatType.value === 'type1' ? '每毛坯可制件数' : '毛坯还可制件数')
 
+// 动态 placeholder
+const materialPlaceholder = computed(() => formatType.value === 'type1' ? '请输入材料号' : '请输入材料牌号')
+const blankSizePlaceholder = computed(() => formatType.value === 'type1' ? '请输入外形尺寸' : '请输入毛坯外形尺寸')
+const blankAvailablePlaceholder = computed(() => formatType.value === 'type1' ? '每毛坯可制件数' : '毛坯还可制件数')
+
 const form = reactive({
-  product_name: '测试产品',
-  process_name: '钻孔',
-  process_number: 'OP-001',
-  version: 'V1.0',
-  equipment: '钻床',
+  product_name: '',
+  process_name: '',
+  process_number: '',
+  version: '',
+  equipment: '',
   control_system: '',
   fixture: '',
   material: '',
-  tool_name: '平底铣刀',
-  tool_length: 50,
-  tool_diameter: 8,
-  workshop: '金工',
-  process_card_number: '5',
-  material_grade: '45',
-  blank_type: '铸件',
+  tool_name: '',
+  tool_length: null,
+  tool_diameter: null,
+  workshop: '',
+  process_card_number: '',
+  material_grade: '',
+  blank_type: '',
   blank_size: '',
   blank_available_pieces: null,
   pieces_per_machine: null,
-  equipment_model: 'Z535',
-  equipment_no: '05',
+  equipment_model: '',
+  equipment_no: '',
   simultaneous_pieces: null,
   fixture_no: '',
   cutting_fluid: '',
@@ -373,20 +378,7 @@ const form = reactive({
   steps: [
     {
       step: 1,
-      step_content: '钻孔 M8',
-      tooling: 'Φ7 麻花钻',
-      spindle_speed: 750,
-      cutting_speed: 16.49,
-      feed_rate: 0.2,
-      depth_of_cut: null,
-      feed_count: 1,
-      machine_time: 0.14,
-      auxiliary_time: null,
-      remark: ''
-    },
-    {
-      step: 2,
-      step_content: '攻螺纹 M8',
+      step_content: '',
       tooling: '',
       spindle_speed: null,
       cutting_speed: null,
@@ -401,14 +393,7 @@ const form = reactive({
   operations: [
     {
       sequence: 1,
-      content: '钻孔 M8',
-      parameters: '',
-      equipment: 'Φ7 麻花钻',
-      remark: ''
-    },
-    {
-      sequence: 2,
-      content: '攻螺纹 M8',
+      content: '',
       parameters: '',
       equipment: '',
       remark: ''
