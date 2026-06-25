@@ -175,7 +175,7 @@ class ParameterExtractor:
         missing = []
         for field in REQUIRED_FIELDS:
             value = params.get(field, '')
-            if not value:
+            if value is None or value == '':
                 missing.append(field)
         
         return len(missing) == 0, missing

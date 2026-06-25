@@ -18,8 +18,9 @@ export const drawingApi = {
 }
 
 export const stlApi = {
-  convert: (stlFile, processCard) => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, generate_gcode: false }),
-  generateGcode: (stlFile, processCard, operations) => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, operations, generate_gcode: true })
+  convert: (stlFile, processCard, direction = '+Z') => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, generate_gcode: false, direction }),
+  generateGcode: (stlFile, processCard, operations, direction = '+Z') => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, operations, generate_gcode: true, direction }),
+  planDirections: (stlFile, processCard) => api.post('/stl/plan-directions', { stl_file: stlFile, process_card: processCard }),
 }
 
 export const gcodeApi = {
