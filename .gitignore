@@ -63,9 +63,5 @@ test_ocr.py
 *.docx
 *.pdf
 
-# Trae documents
-.trae/documents/
-.trae/specs/
-
 # OCR models (if not needed)
 # backend/models/

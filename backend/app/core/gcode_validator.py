@@ -1,14 +1,15 @@
 import re
-from app.models.schemas import ValidationResult, ValidationError, ValidationWarning
+from app.models.schemas import MachineProfile, ValidationResult, ValidationError, ValidationWarning
 
 
 class GCodeValidator:
-    def __init__(self):
+    def __init__(self, machine_profile: MachineProfile = None):
+        self.machine_profile = machine_profile or MachineProfile()
         self.valid_g_codes = {'G00', 'G01', 'G02', 'G03', 'G04', 'G17', 'G18', 'G19',
                               'G20', 'G21', 'G40', 'G41', 'G42', 'G43', 'G44', 'G49',
                               'G54', 'G55', 'G56', 'G57', 'G58', 'G59', 'G80', 'G81',
                               'G82', 'G83', 'G84', 'G85', 'G86', 'G87', 'G88', 'G89',
-                              'G90', 'G91', 'G98', 'G99'}
+                              'G90', 'G91', 'G94', 'G95', 'G98', 'G99'}
 
         self.valid_m_codes = {'M00', 'M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M07',
                               'M08', 'M09', 'M10', 'M11', 'M13', 'M14', 'M15', 'M16',
@@ -17,12 +18,14 @@ class GCodeValidator:
         self.coord_pattern = re.compile(r'([XYZ])([+-]?\d*\.?\d+)')
         self.code_pattern = re.compile(r'([GM])(\d{2})')
         self.feed_pattern = re.compile(r'F([+-]?\d*\.?\d+)')
+        self.spindle_pattern = re.compile(r'S([+-]?\d*\.?\d+)')
 
-        # Configurable limits
-        self.safe_z_height = 5.0
-        self.x_range = (0.0, 200.0)
-        self.y_range = (0.0, 200.0)
-        self.z_range = (0.0, 100.0)
+        self.safe_z_height = self.machine_profile.safe_z
+        self.x_range = (self.machine_profile.x_min, self.machine_profile.x_max)
+        self.y_range = (self.machine_profile.y_min, self.machine_profile.y_max)
+        self.z_range = (self.machine_profile.z_min, self.machine_profile.z_max)
+        self.max_spindle_rpm = self.machine_profile.max_spindle_rpm
+        self.max_cutting_feed = self.machine_profile.max_cutting_feed
 
     def validate(self, gcode: str) -> ValidationResult:
         errors = []
@@ -36,6 +39,9 @@ class GCodeValidator:
             'is_absolute': True,
             'spindle_on': False,
             'current_feed_rate': None,
+            'length_unit': None,
+            'feed_mode': None,
+            'has_absolute_mode': False,
             'has_work_coordinate': False,
             'has_tool_length_comp': False,
             'program_ended': False,
@@ -58,6 +64,38 @@ class GCodeValidator:
                 message="程序结束前未停止主轴(M05)，存在安全风险"
             ))
 
+        has_any_command = any(
+            line.strip() and not line.strip().startswith(';')
+            for line in lines
+        )
+        required_modes = [
+            ('length_unit', 'G21毫米单位'),
+            ('has_absolute_mode', 'G90绝对坐标'),
+            ('feed_mode', 'G94每分钟进给'),
+        ]
+        for key, label in required_modes:
+            if has_any_command and not state[key]:
+                errors.append(ValidationError(
+                    line=0,
+                    code='E006',
+                    message=f"程序未明确设置{label}",
+                    suggestion="仿真模式要求程序初始化明确包含G21、G90和G94"
+                ))
+        if state['length_unit'] and state['length_unit'] != 'mm':
+            errors.append(ValidationError(
+                line=0,
+                code='E007',
+                message="仿真模式仅支持毫米单位G21",
+                suggestion="请移除G20并使用G21"
+            ))
+        if state['feed_mode'] and state['feed_mode'] != 'G94':
+            errors.append(ValidationError(
+                line=0,
+                code='E008',
+                message="仿真模式仅支持G94进给模式(mm/min)",
+                suggestion="请将每转进给换算为mm/min并使用G94"
+            ))
+
         return ValidationResult(
             valid=len(errors) == 0,
             errors=errors,
@@ -71,6 +109,7 @@ class GCodeValidator:
         codes = self.code_pattern.findall(line)
         coords = self.coord_pattern.findall(line)
         feed_match = self.feed_pattern.search(line)
+        spindle_match = self.spindle_pattern.search(line)
 
         g_codes_in_line = set()
         m_codes_in_line = set()
@@ -111,8 +150,17 @@ class GCodeValidator:
         # --- Update state: mode switches ---
         if 'G90' in g_codes_in_line:
             state['is_absolute'] = True
+            state['has_absolute_mode'] = True
         if 'G91' in g_codes_in_line:
             state['is_absolute'] = False
+        if 'G21' in g_codes_in_line:
+            state['length_unit'] = 'mm'
+        if 'G20' in g_codes_in_line:
+            state['length_unit'] = 'inch'
+        if 'G94' in g_codes_in_line:
+            state['feed_mode'] = 'G94'
+        if 'G95' in g_codes_in_line:
+            state['feed_mode'] = 'G95'
 
         # Work coordinate system
         wcs_codes = {'G54', 'G55', 'G56', 'G57', 'G58', 'G59'}
@@ -131,7 +179,25 @@ class GCodeValidator:
 
         # Feed rate
         if feed_match:
-            state['current_feed_rate'] = float(feed_match.group(1))
+            feed_rate = float(feed_match.group(1))
+            state['current_feed_rate'] = feed_rate
+            if feed_rate <= 0 or feed_rate > self.max_cutting_feed:
+                errors.append(ValidationError(
+                    line=line_num,
+                    code='E009',
+                    message=f"进给速度超出仿真范围: F{feed_rate}",
+                    suggestion=f"G94进给速度应大于0且不超过{self.max_cutting_feed}mm/min"
+                ))
+
+        if spindle_match:
+            spindle_speed = float(spindle_match.group(1))
+            if spindle_speed <= 0 or spindle_speed > self.max_spindle_rpm:
+                errors.append(ValidationError(
+                    line=line_num,
+                    code='E010',
+                    message=f"主轴转速超出仿真范围: S{spindle_speed}",
+                    suggestion=f"主轴转速应大于0且不超过{self.max_spindle_rpm}r/min"
+                ))
 
         # Program end
         if 'M02' in m_codes_in_line or 'M30' in m_codes_in_line:
@@ -272,6 +338,6 @@ class GCodeValidator:
         return errors, warnings
 
 
-def validate_gcode(gcode: str) -> ValidationResult:
-    validator = GCodeValidator()
+def validate_gcode(gcode: str, machine_profile: MachineProfile = None) -> ValidationResult:
+    validator = GCodeValidator(machine_profile)
     return validator.validate(gcode)

@@ -140,7 +140,12 @@ const generatedDrawings = ref([])
 const form = reactive({
   product_name: '',
   process_name: '',
+  process_number: '',
+  version: '',
   equipment: '',
+  control_system: '',
+  fixture: '',
+  material: '',
   tool_info: {
     name: '',
     length: 0,
@@ -191,36 +196,35 @@ const generate = async () => {
   generatedDrawings.value = []
   
   try {
-    if (selectedInputType.value === 'natural' && inputData.value) {
-      const response = await naturalLanguageApi.convert(inputData.value)
-      if (response.data.success) {
-        emit('convert', response.data.data)
-      }
-    } else {
-      const response = await advanceApi.generateDrawing(
-        selectedInputType.value,
-        selectedInputType.value === 'stl' ? stlFile.value : inputData.value,
-        form
-      )
-      
-      if (response.data.success) {
-        generatedDrawings.value = response.data.data.drawings || []
-        
-        if (generatedDrawings.value.length > 0) {
-          const gcode = generatedDrawings.value.map(d => d.gcode_segment).join('\n\n')
-          const mockData = {
+    if (selectedInputType.value === 'natural') {
+      alert('自然语言输入请返回“自然语言转换”页面，完成工序卡补全和确认后再生成 G 代码')
+      return
+    }
+
+    const response = await advanceApi.generateDrawing(
+      selectedInputType.value,
+      stlFile.value,
+      form
+    )
+
+    if (response.data.success) {
+      generatedDrawings.value = response.data.data.drawings || []
+
+      if (generatedDrawings.value.length > 0) {
+        const gcode = generatedDrawings.value.map(d => d.gcode_segment).filter(Boolean).join('\n\n')
+        if (gcode) {
+          emit('convert', {
             process_card: form,
             operations: generatedDrawings.value.map((d, i) => ({
               sequence: i + 1,
               content: d.operation_content,
-              parameters: '',
+              parameters: d.parameters || '',
               equipment: form.tool_info.name || 'CNC加工中心',
               remark: ''
             })),
-            gcode: gcode,
-            validation: { valid: true, errors: [], warnings: [] }
-          }
-          emit('convert', mockData)
+            gcode,
+            validation: { valid: false, errors: [], warnings: [] }
+          })
         }
       }
     }

@@ -8,8 +8,18 @@ const api = axios.create({
 })
 
 export const naturalLanguageApi = {
-  convert: (text) => api.post('/natural-language/convert', { text }),
-  precheck: (text) => api.post('/natural-language/precheck', { text })
+  precheck: (message, draft = null, revision = 0, digest = '') => api.post('/natural-language/precheck', {
+    message,
+    draft,
+    revision,
+    digest
+  }),
+  confirm: (draft, revision, digest) => api.post('/natural-language/confirm', {
+    confirmed: true,
+    draft,
+    revision,
+    digest
+  })
 }
 
 export const drawingApi = {
@@ -24,7 +34,7 @@ export const stlApi = {
 }
 
 export const gcodeApi = {
-  validate: (gcode, processCard) => api.post('/gcode/validate', { gcode, processCard })
+  validate: (gcode, processCard = null) => api.post('/gcode/validate', { gcode, process_card: processCard })
 }
 
 export const examplesApi = {

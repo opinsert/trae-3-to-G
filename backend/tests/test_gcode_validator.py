@@ -19,7 +19,7 @@ class TestValidGCode:
         """标准CNC程序（初始化-切削-结束）应无错误，
         确保验证器不会阻止正常加工流程。"""
         gcode = "\n".join([
-            "G90 G54 G17 G40 G49 G80 G21",
+            "G90 G54 G17 G40 G49 G80 G21 G94",
             "T01 M06",
             "G43 H01 Z50.0 M08",
             "M03 S3000",
@@ -325,3 +325,33 @@ class TestBackwardCompatibility:
         result = validator.validate(gcode)
         e003_errors = [e for e in result.errors if e.code == 'E003']
         assert len(e003_errors) == 0
+
+
+class TestMillimeterSimulationContract:
+    """仿真输出必须明确毫米、绝对坐标和每分钟进给，并允许负Z切削。"""
+
+    def test_negative_z_cutting_passes_in_millimeter_work_coordinates(self):
+        gcode = "\n".join([
+            "G90 G54 G21 G94",
+            "M03 S3000",
+            "G00 X10 Y10 Z50",
+            "G01 X15 Y15 Z-5 F200",
+            "G00 Z50",
+            "M05",
+            "M30",
+        ])
+        result = validate_gcode(gcode)
+        assert result.valid is True
+
+    def test_missing_unit_and_feed_modes_are_rejected(self):
+        result = validate_gcode("G90 G54\nM03 S3000\nG01 X10 Y10 Z-2 F200\nM05\nM30")
+        mode_errors = [error for error in result.errors if error.code == 'E006']
+        assert len(mode_errors) == 2
+
+    def test_feed_above_simulation_limit_is_rejected(self):
+        result = validate_gcode("G90 G54 G21 G94\nM03 S3000\nG01 X10 Y10 Z-2 F6000\nM05\nM30")
+        assert any(error.code == 'E009' for error in result.errors)
+
+    def test_spindle_above_simulation_limit_is_rejected(self):
+        result = validate_gcode("G90 G54 G21 G94\nM03 S13000\nG01 X10 Y10 Z-2 F200\nM05\nM30")
+        assert any(error.code == 'E010' for error in result.errors)

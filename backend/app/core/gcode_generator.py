@@ -1,26 +1,123 @@
 import re
-from app.models.schemas import ProcessCard, Operation
+from app.models.schemas import MachineProfile, ProcessCard, Operation
+
+
+class UnsupportedCoordinateError(ValueError):
+    pass
+
+
+def _validate_operation_parameters(operation: Operation, profile: MachineProfile):
+    params = parse_operation_parameters(operation.parameters)
+    for axis in ('X', 'Y', 'Z', 'X_END', 'Y_END', 'RAMP_X', 'RAMP_Y'):
+        if axis not in params:
+            continue
+        axis_name = axis.split('_')[-1] if '_' in axis else axis
+        lower = getattr(profile, f'{axis_name.lower()}_min')
+        upper = getattr(profile, f'{axis_name.lower()}_max')
+        if not lower <= params[axis] <= upper:
+            raise UnsupportedCoordinateError(
+                f'{axis}坐标超出范围: {params[axis]}，允许范围为{lower}..{upper}'
+            )
+    for key in ('STEP', 'PECK'):
+        if key in params and params[key] <= 0:
+            raise ValueError(f'{key}必须大于0')
+
+
+def _validate_generated_coordinates(gcode: str, profile: MachineProfile):
+    for line in gcode.splitlines():
+        line = line.split(';', 1)[0]
+        for axis, raw_value in re.findall(r'([XYZ])([+-]?\d+(?:\.\d+)?)', line):
+            value = float(raw_value)
+            lower = getattr(profile, f'{axis.lower()}_min')
+            upper = getattr(profile, f'{axis.lower()}_max')
+            if not lower <= value <= upper:
+                raise UnsupportedCoordinateError(
+                    f'生成的{axis}坐标超出范围: {value}，允许范围为{lower}..{upper}'
+                )
+
+
+_OPERATION_REQUIREMENTS = [
+    (("返回安全高度", "回退"), ()),
+    (("快移", "定位"), ("X|Y|Z",)),
+    (("斜坡进刀",), ("RAMP_X|X", "RAMP_Y|Y", "Z")),
+    (("键槽",), ("X", "Y", "X_END", "Y_END", "Z")),
+    (("型腔", "腔体", "pocket"), ("X", "Y", "X_END", "Y_END", "Z")),
+    (("侧壁", "壁面"), ("WIDTH", "HEIGHT", "Z")),
+    (("底面",), ("X", "Y", "X_END", "Y_END", "Z")),
+    (("铣平面", "平面铣", "面铣"), ("X", "Y", "X_END", "Y_END", "Z")),
+    (("轮廓", "外形"), ("X", "Y", "WIDTH", "HEIGHT", "Z")),
+    (("深孔",), ("X", "Y", "Z")),
+    (("钻孔", "打孔", "攻丝", "攻牙", "铰孔", "铰刀", "镗孔", "镗削"), ("X", "Y", "Z")),
+    (("倒角",), ("X", "Y", "R")),
+    (("螺纹",), ("X", "Y", "D", "Z", "P")),
+    (("往复", "来回"), ("X", "Y", "WIDTH", "HEIGHT", "Z")),
+    (("圆孔", "圆"), ("X", "Y", "D", "Z")),
+    (("铣削", "加工"), ("X", "Y", "Z")),
+]
+
+
+def parse_operation_parameters(param_str: str) -> dict:
+    params = {}
+    if not param_str:
+        return params
+
+    for part in param_str.split(','):
+        part = part.strip()
+        if '=' not in part:
+            continue
+        key, value = part.split('=', 1)
+        try:
+            params[key.strip()] = float(value.strip())
+        except ValueError:
+            params[key.strip()] = value.strip()
+    return params
+
+
+def required_operation_parameters(content: str) -> tuple:
+    for keywords, requirements in _OPERATION_REQUIREMENTS:
+        if any(keyword in content for keyword in keywords):
+            return requirements
+    return ('支持的工序类型',)
+
+
+def missing_operation_parameters(operations: list) -> list:
+    missing = []
+    if not operations:
+        return ['operations: 至少提供一个带几何参数的加工工序']
+
+    for operation in operations:
+        params = parse_operation_parameters(operation.parameters)
+        for requirement in required_operation_parameters(operation.content):
+            if requirement == '支持的工序类型':
+                missing.append(f'工序{operation.sequence}: 支持的工序类型')
+                continue
+            aliases = requirement.split('|')
+            if not any(alias in params for alias in aliases):
+                missing.append(f'工序{operation.sequence}: {requirement}')
+    return missing
+
 
 class GCodeGenerator:
-    def __init__(self):
+    def __init__(self, machine_profile: MachineProfile = None):
         self.gcode_lines = []
         self.process_card = None
+        self.machine_profile = machine_profile or MachineProfile()
     
     def generate(self, process_card: ProcessCard, operations: list) -> str:
+        missing = missing_operation_parameters(operations)
+        if missing:
+            raise ValueError('缺少生成刀路所需参数: ' + ', '.join(missing))
+
         self.gcode_lines = []
         self.process_card = process_card
-        
+
         self._add_header(process_card)
         self._add_initialization()
-        
-        if operations and len(operations) > 0:
-            for op in operations:
-                self._add_operation(op)
-        else:
-            self._generate_from_process_card()
-        
+
+        for op in operations:
+            self._add_operation(op)
+
         self._add_finalization()
-        
         return '\n'.join(self.gcode_lines)
     
     def _add_header(self, process_card: ProcessCard):
@@ -34,14 +131,18 @@ class GCodeGenerator:
         self.gcode_lines.append(f"; 材料: {process_card.material}")
         if process_card.tool_info:
             self.gcode_lines.append(f"; 刀具: {process_card.tool_info.name} (直径:{process_card.tool_info.diameter}mm, 长度:{process_card.tool_info.length}mm)")
+        self.gcode_lines.append("; 仿真模式：仅供验证与人工审核，不可直接上机")
+        self.gcode_lines.append(f"; 单位: {self.machine_profile.length_unit} | 进给: {self.machine_profile.feed_mode} mm/min")
+        self.gcode_lines.append(f"; 机床配置: {self.machine_profile.name}")
         self.gcode_lines.append("")
     
     def _add_initialization(self):
-        self.gcode_lines.append("G90 G54 G17 G40 G49 G80 G21")
+        p = self.machine_profile
+        self.gcode_lines.append("G90 G54 G17 G40 G49 G80 G21 G94")
         self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0 M08")
-        self.gcode_lines.append("M03 S3000")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G43 H01 Z{p.retract_z:.3f} M08")
+        self.gcode_lines.append(f"M03 S{p.default_spindle_rpm:.0f}")
+        self.gcode_lines.append(f"G00 Z{p.retract_z:.3f}")
         self.gcode_lines.append("")
     
     def _add_operation(self, op: Operation):
@@ -151,14 +252,14 @@ class GCodeGenerator:
     def _add_tool_change_block(self, x, y, cycle_line):
         self.gcode_lines.append("M05")
         self.gcode_lines.append("T02 M06")
-        self.gcode_lines.append("G43 H02 Z50.0")
+        self.gcode_lines.append(f"G43 H02 Z{self.machine_profile.retract_z:.3f}")
         self.gcode_lines.append(f"G00 X{x:.3f} Y{y:.3f}")
         self.gcode_lines.append("G01 Z2.0 F500")
         self.gcode_lines.append(cycle_line)
         self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
         self.gcode_lines.append("T01 M06")
-        self.gcode_lines.append("G43 H01 Z50.0")
+        self.gcode_lines.append(f"G43 H01 Z{self.machine_profile.retract_z:.3f}")
         self.gcode_lines.append("M03 S3000")
     
     def _generate_face_milling_from_card(self):
@@ -183,7 +284,7 @@ class GCodeGenerator:
             self.gcode_lines.append(f"G01 Y{min(y, height):.3f} F500")
         
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_circle_milling_from_card(self):
         _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
@@ -200,7 +301,7 @@ class GCodeGenerator:
         self.gcode_lines.append("G01 Z2.0 F500")
         self.gcode_lines.append(f"G81 Z{hole_depth * -1:.3f} R2.0 F50")
         self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_tapping_from_card(self):
         _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
@@ -231,7 +332,7 @@ class GCodeGenerator:
         self.gcode_lines.append(f"G02 X{x_pos:.3f} Y{y_pos - chamfer_radius:.3f} I{chamfer_radius:.3f} J0 F50")
         self.gcode_lines.append(f"G02 X{x_pos + chamfer_radius:.3f} Y{y_pos:.3f} I0 J{chamfer_radius:.3f} F50")
         self.gcode_lines.append("G01 Z1.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_thread_milling_from_card(self):
         _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
@@ -250,7 +351,7 @@ class GCodeGenerator:
             self.gcode_lines.append(f"G02 I{-tool_offset:.3f} J0 Z{hole_depth * -1 + _ * pitch:.3f} F100")
         
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_deep_hole_drilling_from_card(self):
         _, hole_diameter, hole_depth, x_pos, y_pos = self._extract_card_params()
@@ -268,7 +369,7 @@ class GCodeGenerator:
             self.gcode_lines.append(f"G01 Z{next_depth + 2.0:.3f} F200")
             current_depth = next_depth
         
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_circle_milling_code(self, x, y, hole_diameter, hole_depth, tool_diameter):
         radius = hole_diameter / 2.0
@@ -284,7 +385,7 @@ class GCodeGenerator:
         self.gcode_lines.append(f"G01 Z{hole_depth * -1:.3f} F100")
         self.gcode_lines.append(f"G02 I{cutter_radius:.3f} J0 F200")
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_face_milling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -315,7 +416,7 @@ class GCodeGenerator:
             direction *= -1
         
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_profile_milling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -335,7 +436,7 @@ class GCodeGenerator:
         self.gcode_lines.append(f"G01 X{x:.3f} F{feed}")
         self.gcode_lines.append(f"G01 Y{y:.3f} F{feed}")
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_drilling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -349,7 +450,7 @@ class GCodeGenerator:
         self.gcode_lines.append("G01 Z2.0 F500")
         self.gcode_lines.append(f"G81 Z{depth:.3f} R2.0 F{feed}")
         self.gcode_lines.append("G80")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_tapping(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -397,7 +498,7 @@ class GCodeGenerator:
         self.gcode_lines.append(f"G02 X{x:.3f} Y{y - radius:.3f} I{radius:.3f} J0 F{feed}")
         self.gcode_lines.append(f"G02 X{x + radius:.3f} Y{y:.3f} I0 J{radius:.3f} F{feed}")
         self.gcode_lines.append("G01 Z1.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_thread_milling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -422,7 +523,7 @@ class GCodeGenerator:
             self.gcode_lines.append(f"G02 I{-tool_offset:.3f} J0 Z{current_z:.3f} F{feed}")
         
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_deep_hole_drilling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -444,7 +545,7 @@ class GCodeGenerator:
             self.gcode_lines.append(f"G01 Z{next_depth + 2.0:.3f} F200")
             current_depth = next_depth
         
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_zigzag_milling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -471,7 +572,7 @@ class GCodeGenerator:
             self.gcode_lines.append(f"G01 Y{min(y, y_start + height):.3f} F500")
         
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_circle_milling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -492,7 +593,7 @@ class GCodeGenerator:
         self.gcode_lines.append(f"G01 Z{depth:.3f} F100")
         self.gcode_lines.append(f"G02 I{cutter_radius:.3f} J0 F{feed}")
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
     
     def _generate_generic_milling(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -508,7 +609,7 @@ class GCodeGenerator:
         self.gcode_lines.append("G01 Z5.0 F500")
         self.gcode_lines.append(f"G01 X{rx:.3f} Y{ry:.3f} Z{z:.3f} F{feed}")
         self.gcode_lines.append("G01 Z2.0 F500")
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
 
     def _generate_rapid_code(self, op: Operation):
         params = self._parse_parameters(op.parameters)
@@ -533,20 +634,7 @@ class GCodeGenerator:
             self.gcode_lines.append(f"G01 X{x:.3f} Y{y:.3f} Z{z:.3f} F{feed}")
     
     def _parse_parameters(self, param_str: str) -> dict:
-        params = {}
-        if not param_str:
-            return params
-        
-        parts = param_str.split(',')
-        for part in parts:
-            part = part.strip()
-            if '=' in part:
-                key, value = part.split('=', 1)
-                try:
-                    params[key.strip()] = float(value.strip())
-                except ValueError:
-                    params[key.strip()] = value.strip()
-        return params
+        return parse_operation_parameters(param_str)
     
     # ---- new: pocket / ramp / wall / floor operations ----
 
@@ -646,13 +734,18 @@ class GCodeGenerator:
 
     def _generate_retract(self):
         """Safe retract to clearance height."""
-        self.gcode_lines.append("G00 Z50.0")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
 
     def _add_finalization(self):
-        self.gcode_lines.append("G00 Z100.0 M09")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f} M09")
         self.gcode_lines.append("M05")
         self.gcode_lines.append("M30")
 
-def generate_gcode(process_card: ProcessCard, operations: list) -> str:
-    generator = GCodeGenerator()
+
+def generate_gcode(
+    process_card: ProcessCard,
+    operations: list,
+    machine_profile: MachineProfile = None,
+) -> str:
+    generator = GCodeGenerator(machine_profile)
     return generator.generate(process_card, operations)

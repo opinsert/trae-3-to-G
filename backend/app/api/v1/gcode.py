@@ -11,7 +11,7 @@ router = APIRouter()
 @router.post("/validate", response_model=GCodeValidateResponse)
 async def validate_gcode_endpoint(request: GCodeValidateRequest):
     try:
-        validation = validate_gcode(request.gcode)
+        validation = validate_gcode(request.gcode, request.machine_profile)
         return GCodeValidateResponse(
             success=True,
             data=validation

@@ -56,6 +56,16 @@
 
       <!-- 右栏：工序卡表单 -->
       <div class="space-y-4">
+        <div class="border border-yellow-200 bg-yellow-50 rounded-lg p-3">
+          <p class="text-sm font-medium text-yellow-800">仿真刀具参数</p>
+          <div class="mt-2 grid grid-cols-3 gap-2">
+            <input v-model="form.tool_name" type="text" placeholder="刀具名称" class="border border-yellow-300 rounded px-2 py-1 text-sm" />
+            <input v-model.number="form.tool_length" type="number" min="0" placeholder="长度(mm)" class="border border-yellow-300 rounded px-2 py-1 text-sm" />
+            <input v-model.number="form.tool_diameter" type="number" min="0" placeholder="直径(mm)*" class="border border-yellow-300 rounded px-2 py-1 text-sm" />
+          </div>
+          <p class="mt-1 text-xs text-yellow-700">刀具直径会改变刀路，缺失时不能生成G代码。</p>
+        </div>
+
         <!-- 工序卡基本信息表格 -->
         <div class="border border-gray-300 rounded-lg overflow-hidden">
           <table class="w-full text-sm">
@@ -244,9 +254,10 @@
             <tr class="bg-gray-100 border-b border-gray-300">
               <th class="border-r border-gray-300 px-2 py-1 font-medium w-12">工步号</th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium">工步内容</th>
+              <th class="border-r border-gray-300 px-2 py-1 font-medium">加工参数（mm / mm/min）</th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium">工艺装备</th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium">主轴转速r/min</th>
-              <th class="border-r border-gray-300 px-2 py-1 font-medium">切削速度m/min</th>
+              <th class="border-r border-gray-300 px-2 py-1 font-medium">切削速度mm/min</th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium">进给量mm/r</th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium">被吃刀量mm</th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium">进给次数</th>
@@ -254,7 +265,7 @@
               <th class="px-2 py-1 font-medium w-20">操作</th>
             </tr>
             <tr class="bg-gray-50 border-b border-gray-300">
-              <th class="border-r border-gray-300 px-2 py-1" colspan="8"></th>
+              <th class="border-r border-gray-300 px-2 py-1" colspan="9"></th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium text-xs">机动</th>
               <th class="border-r border-gray-300 px-2 py-1 font-medium text-xs">辅助</th>
               <th class="px-2 py-1"></th>
@@ -265,6 +276,9 @@
               <td class="border-r border-gray-300 px-2 py-1 text-center">{{ step.step }}</td>
               <td class="border-r border-gray-300 px-2 py-1">
                 <input v-model="step.step_content" type="text" placeholder="请输入工步内容" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
+              </td>
+              <td class="border-r border-gray-300 px-2 py-1">
+                <input v-model="step.parameters" type="text" placeholder="例如 X=10, Y=20, Z=-8" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
               </td>
               <td class="border-r border-gray-300 px-2 py-1">
                 <input v-model="step.tooling" type="text" placeholder="请输入工艺装备" class="w-full border-none focus:ring-0 placeholder:text-gray-400" />
@@ -379,6 +393,7 @@ const form = reactive({
     {
       step: 1,
       step_content: '',
+      parameters: '',
       tooling: '',
       spindle_speed: null,
       cutting_speed: null,
@@ -493,12 +508,13 @@ const extractFromImage = async () => {
       if (extractedData.drawing_steps && Array.isArray(extractedData.drawing_steps) && extractedData.drawing_steps.length > 0) {
         form.steps = extractedData.drawing_steps.map((step, index) => ({
           ...step,
-          step: step.step || index + 1
+          step: step.step || index + 1,
+          parameters: step.parameters || ''
         }))
         form.operations = extractedData.drawing_steps.map((step, index) => ({
           sequence: step.step || index + 1,
           content: step.step_content || '',
-          parameters: '',
+          parameters: step.parameters || '',
           equipment: step.tooling || '',
           remark: ''
         }))
@@ -518,6 +534,7 @@ const addStep = () => {
   const newStep = {
     step: (form.steps?.length || 0) + 1,
     step_content: '',
+    parameters: '',
     tooling: '',
     spindle_speed: null,
     cutting_speed: null,
@@ -544,22 +561,59 @@ const removeStep = (index) => {
   }
 }
 
+const buildProcessCard = () => ({
+  product_name: form.product_name || '未命名零件（仿真）',
+  process_name: form.process_name || '仿真加工',
+  process_number: form.process_number || form.process_card_number || 'SIM-001',
+  version: form.version || 'A',
+  equipment: form.equipment || '三轴加工中心（仿真）',
+  control_system: form.control_system || 'FANUC-compatible',
+  fixture: form.fixture || '未指定夹具（仿真）',
+  material: form.material || form.material_grade || '未指定材料（仿真）',
+  tool_info: {
+    name: form.tool_name || '立铣刀（仿真）',
+    length: form.tool_length || 75,
+    diameter: form.tool_diameter || 0
+  },
+  workshop: form.workshop,
+  process_card_number: form.process_card_number,
+  material_grade: form.material_grade,
+  blank_type: form.blank_type,
+  blank_size: form.blank_size,
+  blank_available_pieces: form.blank_available_pieces,
+  pieces_per_machine: form.pieces_per_machine,
+  equipment_model: form.equipment_model,
+  equipment_no: form.equipment_no,
+  simultaneous_pieces: form.simultaneous_pieces,
+  fixture_no: form.fixture_no,
+  cutting_fluid: form.cutting_fluid,
+  station_tool_no: form.station_tool_no,
+  station_tool_name: form.station_tool_name,
+  preparation_time: form.preparation_time,
+  unit_time: form.unit_time
+})
+
 const convert = async () => {
   loading.value = true
   missingFields.value = []
+  const toolDiameter = Number(form.tool_diameter)
+  if (!Number.isFinite(toolDiameter) || toolDiameter <= 0) {
+    missingFields.value = ['刀具直径(mm)']
+    loading.value = false
+    return
+  }
+
   try {
-    // 构建发送给后端的数据，兼容旧格式
-    const payload = {
-      ...form,
-      // 同时发送旧格式和新格式
-      drawing_steps: form.steps,
-      steps: form.steps
+    const response = await drawingApi.convert(buildProcessCard(), form.steps)
+    if (response.data.success) {
+      emit('convert', response.data.data)
+      return
     }
-    
-    await emit('convert', payload)
+    missingFields.value = response.data.missing_fields || []
   } catch (error) {
-    if (error.response?.data?.missing_fields) {
-      missingFields.value = error.response.data.missing_fields
+    const missing = error.response?.data?.missing_fields
+    if (Array.isArray(missing)) {
+      missingFields.value = missing
     } else {
       console.error('转换失败:', error)
       const detail = error.response?.data?.detail || error.message || '未知错误'

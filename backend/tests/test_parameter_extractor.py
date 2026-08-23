@@ -146,11 +146,10 @@ class TestValidateParameters:
         assert valid is False
         assert len(missing) > 0
 
-    def test_empty_values_count_as_missing(self):
-        params = {field: '' for field in REQUIRED_FIELDS}
-        valid, missing = self.extractor.validate_parameters(params)
+    def test_zero_tool_diameter_is_missing_because_it_changes_toolpath(self):
+        valid, missing = self.extractor.validate_parameters({'tool_diameter': 0})
         assert valid is False
-        assert len(missing) == len(REQUIRED_FIELDS)
+        assert 'tool_diameter' in missing
 
 
 class TestToProcessCard:
@@ -197,6 +196,18 @@ class TestToOperations:
         assert isinstance(ops[0], Operation)
         assert ops[0].sequence == 1
 
+    def test_drawing_feed_per_revolution_converts_to_mm_per_minute(self):
+        ops = self.extractor.to_operations([{
+            'step': 1,
+            'step_content': '钻孔',
+            'parameters': 'X=10, Y=20, Z=-8',
+            'spindle_speed': 750,
+            'feed_rate': 0.2,
+            'tooling': '麻花钻',
+        }])
+        assert 'F=150.000' in ops[0].parameters
+        assert 'S=750' in ops[0].parameters
+
     def test_empty_list(self):
         ops = self.extractor.to_operations([])
         assert ops == []
@@ -219,7 +230,7 @@ class TestExtractAsync:
     async def test_extract_falls_back_on_api_error(self):
         extractor = ParameterExtractor()
         extractor.api_key = "fake_key"
-        with patch.object(extractor, '_extract_with_deepseek', side_effect=Exception("API error")):
+        with patch.object(extractor, '_extract_with_ai', side_effect=Exception("API error")):
             result = await extractor.extract("产品名称：测试产品")
             assert 'product_name' in result
 

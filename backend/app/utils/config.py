@@ -1,16 +1,26 @@
 from pydantic_settings import BaseSettings
 
+
+_EXAMPLE_SECRETS = {
+    "您的_API_Key",
+    "您的_OpenClawPlan_API_Key",
+    "您的API_Key",
+    "您的App_ID",
+    "您的Secret_Key",
+    "请替换为随机强密钥",
+}
+
+
+def is_configured_secret(value: str) -> bool:
+    return bool(value and value.strip() not in _EXAMPLE_SECRETS)
+
+
 class Settings(BaseSettings):
-    deepseek_api_key: str = ""
-    deepseek_api_url: str = "https://api.deepseek.com/v1/chat/completions"
     vision_ocr_api_key: str = ""
-    vision_ocr_base_url: str = "https://api.openclawplan.com"
-    vision_ocr_model: str = "gpt-5.5-xhigh"
+    vision_ocr_base_url: str = "https://api.apiyi.com"
+    vision_ocr_model: str = "gpt-5.6-terra"
     vision_ocr_timeout: int = 60
     vision_ocr_enabled: bool = True
-    baidu_app_id: str = ""
-    baidu_api_key: str = ""
-    baidu_secret_key: str = ""
     port: int = 8000
     app_name: str = "GCode Converter"
     app_version: str = "1.0.0"
