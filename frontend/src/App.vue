@@ -3,7 +3,8 @@
     <header class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg">
       <div class="max-w-7xl mx-auto px-4 py-6">
         <h1 class="text-3xl font-bold">G代码转换系统</h1>
-        <p class="mt-2 text-blue-100">将自然语言、工序图和STL文件转换为可执行的G代码</p>
+        <p class="mt-2 text-blue-100">将自然语言、工序图和STL文件转换为待审核的G代码</p>
+        <p class="mt-2 text-xs text-yellow-100">仿真模式：所有长度使用 mm，进给使用 mm/min；验证通过仍需人工审核、空运行和试切后才能上机。</p>
       </div>
     </header>
 
@@ -13,7 +14,7 @@
           <button
             v-for="tab in tabs"
             :key="tab.id"
-            @click="currentTab = tab.id"
+            @click="switchTab(tab.id)"
             :class="[
               'px-6 py-4 font-medium transition-colors duration-200 border-b-2',
               currentTab === tab.id
@@ -43,7 +44,7 @@
       <InlineGCodeViewer
         v-if="convertedData?.gcode && currentTab !== 'stl'"
         :gcode="convertedData.gcode"
-        :manual-validation="currentTab === 'natural'"
+        :validation="convertedData.validation"
       />
     </main>
   </div>
@@ -65,12 +66,15 @@ const tabs = [
 const currentTab = ref('natural')
 const convertedData = ref(null)
 
+const switchTab = (tabId) => {
+  currentTab.value = tabId
+  convertedData.value = null
+}
+
 const handleConvert = (data) => {
-  console.log('收到转换数据:', data)
   if (data) {
     convertedData.value = data
   } else {
-    console.error('没有收到转换数据')
     alert('转换失败：没有收到数据')
   }
 }

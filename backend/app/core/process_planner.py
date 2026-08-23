@@ -1,19 +1,14 @@
-"""
-DeepSeek-powered machining process planner.
+"""AI-powered machining process planner.
 
-Takes STL geometry analysis (from stl_analyzer) + process card info,
-calls DeepSeek to reason about feature types and optimal machining sequence,
-then produces operations compatible with the GCodeGenerator.
+Takes STL geometry analysis plus process card info, calls the configured
+vision/text AI gateway, then produces operations compatible with the GCodeGenerator.
 
-Falls back to rule-based planner when DeepSeek is unavailable.
+Falls back to rule-based planner when the AI gateway is unavailable.
 """
-import json
 import logging
 import traceback
 
-import aiohttp
-
-from app.utils.config import settings
+from app.utils.ai_gateway import is_ai_gateway_configured, request_chat_completion_json
 
 logger = logging.getLogger(__name__)
 
@@ -22,112 +17,64 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-async def plan_directions_with_deepseek(
+async def plan_directions_with_ai(
     all_dirs: dict, process_card: dict, tool_diameter: float = 10.0
 ) -> dict:
-    """Analyze all 6 directions and recommend machining order via DeepSeek.
-
-    Returns:
-        {'recommended_order': ['+Z', '-Y', ...],
-         'skip_reasons': {'-Z': '底面为平面无需加工', ...},
-         'explanation': '...'}
-    """
-    if not settings.deepseek_api_key:
+    """Analyze all 6 directions and recommend machining order via AI."""
+    if not is_ai_gateway_configured():
         return _fallback_direction_plan(all_dirs)
 
     try:
-        return await _call_deepseek_directions(all_dirs, process_card, tool_diameter)
+        return await _call_ai_directions(all_dirs, process_card, tool_diameter)
     except Exception as e:
-        logger.warning("DeepSeek方向分析失败(%s)，回退本地规则", type(e).__name__)
+        logger.warning("AI方向分析失败(%s)，回退本地规则", type(e).__name__)
         return _fallback_direction_plan(all_dirs)
 
 
-async def plan_with_deepseek(geom: dict, process_card: dict,
-                             tool_diameter: float = 10.0) -> dict:
-    """Main entry point: plan machining operations using DeepSeek.
-
-    Args:
-        geom: Geometry analysis dict from stl_analyzer.analyze_stl().
-        process_card: Process card dict with material, tool, etc.
-        tool_diameter: Tool diameter in mm.
-
-    Returns:
-        {'operations': [...], 'explanation': '...', 'source': 'deepseek'|'fallback'}
-    """
-    if not settings.deepseek_api_key:
-        logger.info("DeepSeek API key 未配置，使用本地规则规划")
+async def plan_with_ai(geom: dict, process_card: dict,
+                       tool_diameter: float = 10.0) -> dict:
+    """Main entry point: plan machining operations using AI."""
+    if not is_ai_gateway_configured():
+        logger.info("AI API key 未配置，使用本地规则规划")
         return _fallback_plan(geom, tool_diameter)
 
     try:
-        return await _call_deepseek(geom, process_card, tool_diameter)
+        return await _call_ai(geom, process_card, tool_diameter)
     except Exception as e:
-        logger.warning("DeepSeek 规划失败 (%s)，回退本地规则", type(e).__name__)
-        logger.debug("DeepSeek error traceback:\n%s", traceback.format_exc())
+        logger.warning("AI工艺规划失败 (%s)，回退本地规则", type(e).__name__)
+        logger.debug("AI error traceback:\n%s", traceback.format_exc())
         return _fallback_plan(geom, tool_diameter)
 
 
 # ---------------------------------------------------------------------------
-# DeepSeek call
+# AI call
 # ---------------------------------------------------------------------------
 
-async def _call_deepseek(geom: dict, card: dict,
-                         tool_dia: float) -> dict:
+async def _call_ai(geom: dict, card: dict,
+                   tool_dia: float) -> dict:
     prompt = _build_prompt(geom, card, tool_dia)
 
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {settings.deepseek_api_key}',
-    }
-    body = {
-        'model': 'deepseek-chat',
-        'messages': [
-            {
-                'role': 'system',
-                'content': (
-                    '你是一个资深的CNC机加工工艺师，精通铣削加工工艺规划。'
-                    '请根据零件几何数据，制定合理的加工工序顺序。'
-                    '回复必须是合法的JSON，不要包含任何额外说明文字。'
-                    '【安全规则-不可违反】'
-                    '1.禁止直插下刀:所有Z向下刀必须同时移动X/Y(斜坡进刀)'
-                    '2.最大每刀切深3mm,超出必须分层'
-                    '3.深腔体(深度>30mm或>宽度的50%)必须用型腔铣削策略:'
-                    '  每层=斜坡进刀→清层→修壁,重复至底面'
-                    '4.精加工壁面时必须考虑刀具半径补偿'
-                ),
-            },
-            {'role': 'user', 'content': prompt},
-        ],
-        'temperature': 0.1,
-    }
-
-    async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=40)
-    ) as session:
-        async with session.post(
-            settings.deepseek_api_url, headers=headers, json=body
-        ) as resp:
-            resp.raise_for_status()
-            result = await resp.json()
-
-    try:
-        content = result['choices'][0]['message']['content']
-    except (KeyError, IndexError) as e:
-        raise ValueError(f"DeepSeek 响应格式异常: {e}") from e
-
-    # Strip markdown code fences if present
-    content = content.strip()
-    if content.startswith('```'):
-        content = content.split('\n', 1)[-1].rsplit('\n```', 1)[0]
-
-    try:
-        plan = json.loads(content)
-    except json.JSONDecodeError:
-        logger.warning("DeepSeek 返回非JSON，内容: %.200s", content)
-        raise
+    plan = await request_chat_completion_json([
+        {
+            'role': 'system',
+            'content': (
+                '你是一个资深的CNC机加工工艺师，精通铣削加工工艺规划。'
+                '请根据零件几何数据，制定合理的加工工序顺序。'
+                '回复必须是合法的JSON，不要包含任何额外说明文字。'
+                '【安全规则-不可违反】'
+                '1.禁止直插下刀:所有Z向下刀必须同时移动X/Y(斜坡进刀)'
+                '2.最大每刀切深3mm,超出必须分层'
+                '3.深腔体(深度>30mm或>宽度的50%)必须用型腔铣削策略:'
+                '  每层=斜坡进刀→清层→修壁,重复至底面'
+                '4.精加工壁面时必须考虑刀具半径补偿'
+            ),
+        },
+        {'role': 'user', 'content': prompt},
+    ])
 
     operations = plan.get('operations', [])
     if not operations:
-        raise ValueError("DeepSeek 未返回有效工序")
+        raise ValueError("AI 未返回有效工序")
 
     # re-number sequences
     for i, op in enumerate(operations, 1):
@@ -137,51 +84,34 @@ async def _call_deepseek(geom: dict, card: dict,
         op.setdefault('parameters', '')
 
     logger.info(
-        "DeepSeek 规划完成: %d条工序 | %s",
+        "AI 规划完成: %d条工序 | %s",
         len(operations), plan.get('process_summary', '')
     )
     return {
         'operations': operations,
         'explanation': plan.get('process_summary', ''),
-        'source': 'deepseek',
+        'source': 'ai',
     }
 
 
 # ---------------------------------------------------------------------------
-# direction-aware DeepSeek call
+# Direction-aware AI call
 # ---------------------------------------------------------------------------
 
-async def _call_deepseek_directions(
+async def _call_ai_directions(
     all_dirs: dict, card: dict, tool_dia: float
 ) -> dict:
     prompt = _build_direction_prompt(all_dirs, card, tool_dia)
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {settings.deepseek_api_key}',
-    }
-    body = {
-        'model': 'deepseek-chat',
-        'messages': [
-            {'role': 'system', 'content': '你是CNC工艺师。只输出JSON。'},
-            {'role': 'user', 'content': prompt},
-        ],
-        'temperature': 0.1,
-    }
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=40)) as s:
-        async with s.post(settings.deepseek_api_url, headers=headers, json=body) as r:
-            r.raise_for_status()
-            result = await r.json()
-
-    content = result['choices'][0]['message']['content'].strip()
-    if content.startswith('```'):
-        content = content.split('\n', 1)[-1].rsplit('\n```', 1)[0]
-    plan = json.loads(content)
-    logger.info("DeepSeek方向推荐: %s", plan.get('recommended_order', []))
+    plan = await request_chat_completion_json([
+        {'role': 'system', 'content': '你是CNC工艺师。只输出JSON。'},
+        {'role': 'user', 'content': prompt},
+    ])
+    logger.info("AI方向推荐: %s", plan.get('recommended_order', []))
     return {
         'recommended_order': plan.get('recommended_order', list(all_dirs.keys())),
         'skip_reasons': plan.get('skip_reasons', {}),
         'explanation': plan.get('explanation', ''),
-        'source': 'deepseek',
+        'source': 'ai',
     }
 
 
@@ -223,11 +153,22 @@ def _build_direction_prompt(all_dirs: dict, card: dict, tool_dia: float) -> str:
 
 
 def _fallback_direction_plan(all_dirs: dict) -> dict:
-    needed = list(all_dirs.keys())
+    needed = [
+        name for name, info in all_dirs.items()
+        if name in ('+Z', '-Z', '+X', '-X', '+Y', '-Y')
+        and info.get('depth', 0) >= 0.5
+    ]
+    if not needed and '+Z' in all_dirs:
+        needed = ['+Z']
+    skip_reasons = {
+        name: '该方向几何深度不足，无需单独加工'
+        for name in all_dirs
+        if name not in needed
+    }
     return {
         'recommended_order': needed,
-        'skip_reasons': {},
-        'explanation': '本地规则: 按默认顺序加工所有方向',
+        'skip_reasons': skip_reasons,
+        'explanation': '本地规则: 根据各方向几何深度筛选加工方向',
         'source': 'fallback',
     }
 
@@ -331,6 +272,6 @@ def _fallback_plan(geom: dict, tool_dia: float) -> dict:
     from app.core.stl_analyzer import plan_operations
     return {
         'operations': plan_operations(geom, tool_dia),
-        'explanation': '使用本地规则生成（未配置DeepSeek API key或API调用失败）',
+        'explanation': '使用本地规则生成（未配置 AI API key 或 API 调用失败）',
         'source': 'fallback',
     }

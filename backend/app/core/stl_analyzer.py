@@ -7,7 +7,6 @@ the bounding box / features for that orientation.
 import base64
 import io
 import logging
-import copy
 
 import numpy as np
 import trimesh
@@ -53,24 +52,30 @@ def load_mesh(stl_base64: str) -> trimesh.Trimesh:
     return mesh
 
 
-def analyze_stl(stl_base64: str) -> dict:
-    """Single-orientation analysis (default +Z)."""
+def analyze_stl(stl_base64: str, direction: str = '+Z') -> dict:
+    """Analyze an STL after orienting the requested machining direction to +Z."""
     mesh = load_mesh(stl_base64)
-    return _analyze_mesh(mesh)
+    if direction not in DIRECTIONS:
+        raise ValueError(f"不支持的加工方向: {direction}")
+    if direction != '+Z':
+        mesh.apply_transform(DIRECTIONS[direction])
+    result = _analyze_mesh(mesh)
+    result['direction'] = direction
+    result['label'] = DIRECTION_LABELS[direction]
+    return result
 
 
 def analyze_all_directions(stl_base64: str) -> dict:
     """Analyze the part from all six machining directions."""
     mesh = load_mesh(stl_base64)
-
     directions = {}
-    for name, matrix in DIRECTIONS.items():
-        rotated = mesh.copy()
-        rotated.apply_transform(matrix)
-        info = _analyze_mesh(rotated)
-        info['direction'] = name
-        info['label'] = DIRECTION_LABELS[name]
-        directions[name] = info
+    for name, transform in DIRECTIONS.items():
+        oriented_mesh = mesh.copy()
+        if name != '+Z':
+            oriented_mesh.apply_transform(transform)
+        directions[name] = _analyze_mesh(oriented_mesh)
+        directions[name]['direction'] = name
+        directions[name]['label'] = DIRECTION_LABELS[name]
 
     # Determine which directions are actually needed
     needed = _filter_needed_directions(directions)

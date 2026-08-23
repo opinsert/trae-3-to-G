@@ -67,32 +67,31 @@ class TestGenerate:
         self.card = make_process_card()
 
     def test_generate_with_operations(self):
-        ops = [make_operation(content="铣平面", parameters="X=0, Y=0, Z=-2, F=200")]
+        ops = [make_operation(content="铣平面", parameters="X=0, Y=0, X_END=50, Y_END=50, Z=-2, F=200")]
         gcode = self.gen.generate(self.card, ops)
         assert "G90" in gcode
         assert "M30" in gcode
         assert "; 产品名称: 测试产品" in gcode
 
-    def test_generate_without_operations(self):
-        gcode = self.gen.generate(self.card, [])
-        assert "G90" in gcode
-        assert "M30" in gcode
+    def test_generate_without_operations_requires_geometry(self):
+        with pytest.raises(ValueError, match="至少提供一个"):
+            self.gen.generate(self.card, [])
 
     def test_header_contains_process_card_info(self):
-        gcode = self.gen.generate(self.card, [])
+        gcode = self.gen.generate(self.card, [make_operation()])
         assert "测试产品" in gcode
         assert "OP001" in gcode
         assert "FANUC" in gcode
         assert "铝合金" in gcode
 
     def test_initialization_codes(self):
-        gcode = self.gen.generate(self.card, [])
+        gcode = self.gen.generate(self.card, [make_operation()])
         assert "G90 G54 G17 G40 G49 G80 G21" in gcode
         assert "T01 M06" in gcode
         assert "M03 S3000" in gcode
 
     def test_finalization_codes(self):
-        gcode = self.gen.generate(self.card, [])
+        gcode = self.gen.generate(self.card, [make_operation()])
         assert "M05" in gcode
         assert "M30" in gcode
 
@@ -107,15 +106,15 @@ class TestOperationDispatch:
         return self.gen.generate(self.card, [op])
 
     def test_face_milling(self):
-        gcode = self._generate_with_op("铣平面")
+        gcode = self._generate_with_op("铣平面", "X=0, Y=0, X_END=50, Y_END=50, Z=-2, F=200")
         assert "; 平面铣削" in gcode
 
     def test_face_milling_alt_keyword(self):
-        gcode = self._generate_with_op("平面铣")
+        gcode = self._generate_with_op("平面铣", "X=0, Y=0, X_END=50, Y_END=50, Z=-2, F=200")
         assert "; 平面铣削" in gcode
 
     def test_profile_milling(self):
-        gcode = self._generate_with_op("轮廓加工")
+        gcode = self._generate_with_op("轮廓加工", "X=10, Y=10, WIDTH=50, HEIGHT=40, Z=-5, F=100")
         assert "; 轮廓铣削" in gcode
 
     def test_drilling(self):
@@ -167,9 +166,9 @@ class TestOperationDispatch:
         gcode = self._generate_with_op("快移到位置")
         assert "G00" in gcode
 
-    def test_generic_code_fallback(self):
-        gcode = self._generate_with_op("未知操作")
-        assert "G01" in gcode
+    def test_unknown_operation_requires_supported_type(self):
+        with pytest.raises(ValueError, match="支持的工序类型"):
+            self._generate_with_op("未知操作")
 
 
 class TestExtractHelpers:
@@ -209,55 +208,17 @@ class TestGenerateFromProcessCard:
     def setup_method(self):
         self.gen = GCodeGenerator()
 
-    def test_face_milling_from_card(self):
-        card = make_process_card(process_name="铣平面加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 平面铣削" in gcode
-
-    def test_drilling_from_card(self):
-        card = make_process_card(process_name="钻孔加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 钻孔" in gcode
-
-    def test_tapping_from_card(self):
-        card = make_process_card(process_name="攻丝加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 攻丝" in gcode
-
-    def test_reaming_from_card(self):
-        card = make_process_card(process_name="铰孔精加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 铰孔" in gcode
-
-    def test_boring_from_card(self):
-        card = make_process_card(process_name="镗孔加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 镗孔" in gcode
-
-    def test_chamfering_from_card(self):
-        card = make_process_card(process_name="倒角加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 倒角" in gcode
-
-    def test_thread_from_card(self):
-        card = make_process_card(process_name="螺纹加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 螺纹铣削" in gcode
-
-    def test_deep_hole_from_card(self):
-        card = make_process_card(process_name="深孔加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 深孔钻" in gcode
-
-    def test_circle_from_card(self):
-        card = make_process_card(process_name="圆孔加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 铣圆孔" in gcode
-
-    def test_default_falls_to_circle(self):
-        card = make_process_card(process_name="其他加工")
-        gcode = self.gen.generate(card, [])
-        assert "; 铣圆孔" in gcode
+    @pytest.mark.parametrize(
+        "process_name",
+        [
+            "铣平面加工", "钻孔加工", "攻丝加工", "铰孔精加工", "镗孔加工",
+            "倒角加工", "螺纹加工", "深孔加工", "圆孔加工", "其他加工",
+        ],
+    )
+    def test_process_card_without_geometry_requires_operations(self, process_name):
+        card = make_process_card(process_name=process_name)
+        with pytest.raises(ValueError, match="至少提供一个"):
+            self.gen.generate(card, [])
 
 
 class TestCircleMillingCode:
