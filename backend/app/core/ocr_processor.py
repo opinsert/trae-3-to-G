@@ -2,6 +2,7 @@ import re
 
 from app.utils.ai_gateway import is_ai_gateway_configured, request_chat_completion_json
 from app.utils.config import settings
+from app.utils.domain_correction import DomainCorrector
 
 
 def _empty_ocr_result(**overrides) -> dict:
@@ -41,6 +42,18 @@ def _empty_ocr_result(**overrides) -> dict:
 
 
 class OCRProcessor:
+    def __init__(self):
+        """初始化OCR处理器，包含领域数据纠错器"""
+        self.corrector = DomainCorrector()
+
+        # 添加额外的数控加工术语
+        self.corrector.add_terms([
+            "工序卡", "工艺卡", "程序单", "刀具卡",
+            "工件", "毛坯", "夹具", "量具",
+            "主轴", "进给率", "转速", "冷却液",
+            "粗加工", "精加工", "半精加工"
+        ])
+
     async def recognize(self, image_data: str) -> dict:
         if not image_data or not image_data.strip():
             raise ValueError('图片数据不能为空')
@@ -143,6 +156,17 @@ class OCRProcessor:
 
     def _normalize_vision_result(self, parsed: dict) -> dict:
         normalized = self._ensure_full_fields(parsed if isinstance(parsed, dict) else {})
+
+        # 应用领域数据纠错
+        fields_to_correct = [
+            'process_name', 'material', 'material_grade', 'blank_type',
+            'equipment', 'equipment_model', 'control_system', 'fixture',
+            'tool_name', 'cutting_fluid'
+        ]
+        for field in fields_to_correct:
+            if normalized.get(field) and isinstance(normalized[field], str):
+                normalized[field] = self.corrector.correct(normalized[field])
+
         normalized['tool_length'] = self._to_number(normalized.get('tool_length'), 0)
         normalized['tool_diameter'] = self._to_number(normalized.get('tool_diameter'), 0)
 
@@ -164,10 +188,20 @@ class OCRProcessor:
         for index, step in enumerate(steps):
             if not isinstance(step, dict):
                 continue
+
+            # 对工序内容和刀具信息应用纠错
+            step_content = str(step.get('step_content') or step.get('content') or '')
+            if step_content:
+                step_content = self.corrector.correct(step_content)
+
+            tooling = str(step.get('tooling') or step.get('equipment') or '')
+            if tooling:
+                tooling = self.corrector.correct(tooling)
+
             normalized_step = {
                 'step': self._to_int(step.get('step'), index + 1),
-                'step_content': str(step.get('step_content') or step.get('content') or ''),
-                'tooling': str(step.get('tooling') or step.get('equipment') or ''),
+                'step_content': step_content,
+                'tooling': tooling,
                 'spindle_speed': self._to_number(step.get('spindle_speed'), None),
                 'cutting_speed': (
                     self._to_number(step.get('cutting_speed'), None) * 1000
