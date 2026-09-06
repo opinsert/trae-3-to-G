@@ -63,5 +63,5 @@ test_ocr.py
 *.docx
 *.pdf
 
-# OCR models (if not needed)
-# backend/models/
+# OCR 模型缓存（EasyOCR 已弃用，防止大模型文件再次入库）
+backend/models/
