@@ -11,7 +11,7 @@ from app.utils.ai_gateway import parse_json_object
 
 
 VALID_RESULT = {
-    'process_name': '钻削',
+    'process_name': '铣削',
     'process_card_number': '5',
     'material_grade': '45',
     'equipment': '钻床',
@@ -41,7 +41,7 @@ def test_visual_result_is_normalized_for_process_card_form():
     ) as request_json:
         result = asyncio.run(processor.recognize('data:image/png;base64,ZmFrZQ=='))
 
-    assert result['process_name'] == '钻削'
+    assert result['process_name'] == '铣削'
     assert result['drawing_steps'][0]['spindle_speed'] == 750
     assert result['drawing_steps'][0]['cutting_speed'] == 16490
     assert result['drawing_steps'][0]['feed_rate'] == 0.2

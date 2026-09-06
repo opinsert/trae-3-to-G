@@ -44,7 +44,9 @@ class DomainCorrector:
         Args:
             standard_terms: 标准术语列表，为None时使用默认术语表
         """
-        self.standard_terms = standard_terms or self.DEFAULT_STANDARD_TERMS
+        # 拷贝一份，避免实例间共享同一个 list：否则任一个实例 add_terms
+        # 都会 extend 类变量 DEFAULT_STANDARD_TERMS，污染后续所有默认实例。
+        self.standard_terms = list(standard_terms) if standard_terms else list(self.DEFAULT_STANDARD_TERMS)
         self.length_index = self._build_length_index()
 
     def _build_length_index(self) -> Dict[int, List[str]]:

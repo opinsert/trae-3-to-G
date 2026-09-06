@@ -1,7 +1,10 @@
+import logging
 import re
 from typing import Optional
 
 from app.utils.ai_gateway import request_chat_completion_json
+
+logger = logging.getLogger(__name__)
 from app.models.schemas import ProcessCard, ToolInfo, Operation
 from app.utils.config import is_configured_secret, settings
 
@@ -160,10 +163,13 @@ class ParameterExtractor:
 
     async def extract(self, text: str) -> dict:
         if not settings.vision_ocr_enabled or not is_configured_secret(self.api_key) or not settings.vision_ocr_model:
+            logger.warning("自然语言 AI 提取未启用（缺配置），回退本地正则")
             return self._fallback_extract(text)
         try:
             return await self._extract_with_ai(text)
-        except Exception:
+        except Exception as e:
+            # 不静默：记录原因，避免模型故障被正则回退掩盖（见 ai_smoke.py 诊断记录）
+            logger.warning("自然语言 AI 提取失败(%s)，回退本地正则", type(e).__name__)
             return self._fallback_extract(text)
 
     async def _extract_with_ai(self, text: str) -> dict:

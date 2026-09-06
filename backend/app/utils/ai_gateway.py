@@ -35,7 +35,9 @@ async def request_chat_completion_json(
     body = {
         'model': settings.vision_ocr_model,
         'messages': messages,
-        'temperature': 0.1,
+        # 诊断记录：poke2api 中转拒绝 temperature<1.0（0.1 直接 400），思考型
+        # 模型不支持采样温度配置，故移除该字段交给服务端默认值。
+        'max_tokens': 4096,
     }
     if response_format:
         body['response_format'] = response_format
