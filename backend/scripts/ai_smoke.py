@@ -11,9 +11,10 @@
 覆盖场景:
     ping     网关连通性(最小 chat，验证 key/base_url/model 与 JSON 返回)
     ocr      工序图视觉识别 (工序图.png / 工序图2.png / backend/test.jpg)
-    nl       自然语言参数提取 (一段自由语义描述，正则回退无法处理 → 验证模型语义能力)
     stl      STL 单方向(+Z) AI 工艺规划
     stl-dirs STL 六方向加工顺序 AI 推荐
+
+注：自然语言提取已改为纯脚本（不调 AI），不在本脚本覆盖范围。
 
 退出码: 0=全部通过, 1=存在失败。单个场景失败不中断，逐场景汇总。
 """
@@ -43,7 +44,6 @@ except ImportError:  # pragma: no cover - 环境缺 python-dotenv 时兜底
 
 from app.utils.ai_gateway import request_chat_completion_json  # noqa: E402
 from app.core.ocr_processor import ocr_recognize  # noqa: E402
-from app.core.parameter_extractor import extract_parameters  # noqa: E402
 from app.core.stl_analyzer import analyze_all_directions, analyze_stl  # noqa: E402
 from app.core.process_planner import plan_directions_with_ai, plan_with_ai  # noqa: E402
 from app.utils.config import settings  # noqa: E402
@@ -102,23 +102,6 @@ async def case_ocr(path: Path):
     return {"passed": passed, "summary": summary, "elapsed": time.time() - start}
 
 
-async def case_nl():
-    start = time.time()
-    text = (
-        "用直径10毫米的立铣刀加工一块120x80x15的铝合金板。"
-        "先粗铣上表面，每刀3毫米，转速800，进给每分钟300；"
-        "然后在中心开一个宽30深5的矩形槽。材料45钢，冷却液用乳化液。"
-    )
-    result = await extract_parameters(text)
-    ops = result.get("operations") or []
-    passed = len(ops) >= 2 and bool(result.get("product_name") or result.get("material"))
-    summary = (
-        f"提取到工步{len(ops)}条 | 产品={result.get('product_name')!r} 材料={result.get('material')!r} "
-        f"刀具={result.get('tool_name')!r} | 首工步={_short(ops[0].get('content', ''), 40) if ops else '无'}"
-    )
-    return {"passed": passed, "summary": summary, "elapsed": time.time() - start}
-
-
 async def case_stl():
     """单方向工艺规划（+Z）"""
     start = time.time()
@@ -152,7 +135,6 @@ async def case_stl_directions():
 CASES = {
     "ping": case_ping,
     "ocr": [lambda p=p: case_ocr(p) for p in STL_SAMPLES.values()],
-    "nl": case_nl,
     "stl": case_stl,
     "stl-dirs": case_stl_directions,
 }

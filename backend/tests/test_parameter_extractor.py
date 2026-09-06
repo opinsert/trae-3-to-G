@@ -1,5 +1,3 @@
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 from app.core.parameter_extractor import (
     ParameterExtractor,
     extract_parameters,
@@ -218,21 +216,32 @@ class TestToOperations:
         assert ops[0].sequence == 1
 
 
-class TestExtractAsync:
-    @pytest.mark.asyncio
-    async def test_extract_uses_fallback_when_no_api_key(self):
-        extractor = ParameterExtractor()
-        extractor.api_key = ""
-        result = await extractor.extract("产品名称：测试产品")
-        assert 'product_name' in result
+class TestExtract:
+    def test_extract_is_pure_script_no_ai(self):
+        """用户要求：自然语言提取必须是纯脚本，不调用任何 AI。"""
+        result = ParameterExtractor().extract("产品名称：测试产品")
+        assert result['product_name'] == '测试产品'
 
-    @pytest.mark.asyncio
-    async def test_extract_falls_back_on_api_error(self):
-        extractor = ParameterExtractor()
-        extractor.api_key = "fake_key"
-        with patch.object(extractor, '_extract_with_ai', side_effect=Exception("API error")):
-            result = await extractor.extract("产品名称：测试产品")
-            assert 'product_name' in result
+    def test_worded_steps_extract_tool_speed_feed(self):
+        """叙述式「工步N」格式应提取刀具、转速S、进给F与工艺说明。"""
+        text = (
+            "工步1 粗铣键槽1号键槽铣刀（d=6mm，l=50mm，H01=0）转速3000r/min，"
+            "进给速度200mm/min，每层切深2mm。"
+            "工步2 精铣键槽至尺寸2号键槽铣刀（d=8mm，l=60mm，H02=0）转速4000r/min，"
+            "进给速度100mm/min，单次走刀。"
+        )
+        result = ParameterExtractor().extract(text)
+        ops = result['operations']
+        assert len(ops) == 2
+        assert ops[0]['content'] == '粗铣键槽'
+        assert '1号键槽铣刀' in ops[0]['equipment']
+        assert 'S=3000' in ops[0]['parameters']
+        assert 'F=200' in ops[0]['parameters']
+        assert '每层切深2mm' in ops[0]['remark']
+        # 顶层刀具信息从首工步回填
+        assert result['tool_name'] == '1号键槽铣刀'
+        assert result['tool_diameter'] == 6.0
+        assert result['tool_length'] == 50.0
 
 
 class TestValidateAndConvert:
@@ -266,7 +275,6 @@ class TestValidateAndConvert:
 
 
 class TestExtractParametersFunction:
-    @pytest.mark.asyncio
-    async def test_convenience_function(self):
-        result = await extract_parameters("产品名称：测试\n工序名称：铣削")
+    def test_convenience_function(self):
+        result = extract_parameters("产品名称：测试\n工序名称：铣削")
         assert 'product_name' in result

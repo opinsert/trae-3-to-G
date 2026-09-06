@@ -7,7 +7,8 @@ export default defineConfig({
     port: 5175,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // 127.0.0.1 直连：Windows 上 localhost 有 ~2s IPv6 回退延迟
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       }
     }

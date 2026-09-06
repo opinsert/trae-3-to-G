@@ -31,7 +31,7 @@ async def precheck_natural_language(request: NaturalLanguagePrecheckRequest):
         raise HTTPException(status_code=422, detail="本轮补充内容不能为空")
 
     try:
-        extracted = await extract_parameters(request.message)
+        extracted = extract_parameters(request.message)
         previous = draft_to_params(request.draft or {})
         params = merge_natural_language_draft(previous, extracted)
         params["field_sources"] = {

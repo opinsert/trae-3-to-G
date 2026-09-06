@@ -1,12 +1,7 @@
-import logging
 import re
 from typing import Optional
 
-from app.utils.ai_gateway import request_chat_completion_json
-
-logger = logging.getLogger(__name__)
 from app.models.schemas import ProcessCard, ToolInfo, Operation
-from app.utils.config import is_configured_secret, settings
 
 # 保持 drawing/STL 旧调用方的兼容性；自然语言流程使用下方的严格字段集合。
 REQUIRED_FIELDS = ['tool_diameter']
@@ -50,11 +45,88 @@ _OPERATION_PARAM_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# 叙述式工步：捕获「工步N ...」直到下一个「工步N」或文本末尾（可跨行、可出现在行中）
+_WORDED_STEP_PATTERN = re.compile(r'工步\s*(\d+)\s*[.、)）:：]?\s*(.*?)(?=工步\s*\d+|$)', re.S)
+# 「1号键槽铣刀（d=6mm，l=50mm，H01=0）」→ 刀具描述 + 括号规格
+_TOOL_SPEC_PATTERN = re.compile(
+    r'(\d+\s*号[^，。；：\s（(]{0,10}?刀|[^，。；：\s（(0-9]{1,10}?刀)\s*[（(]([^）)]*)[）)]'
+)
+_SPINDLE_PATTERN = re.compile(r'转速[：:]?\s*(\d+(?:\.\d+)?)\s*(?:r/min|rpm|转/分)?')
+_FEED_PATTERN = re.compile(r'进给(?:速度)?[：:]?\s*[Ff]?[=：:]?\s*(\d+(?:\.\d+)?)\s*(?:mm/min)?')
+
+
+def _parse_worded_step(sequence: int, segment: str) -> dict:
+    seg = re.sub(r'\s*\n\s*', '', segment).strip().rstrip('。')
+
+    equipment = ''
+    label_match = re.search(r'(?:刀具|工艺装备|设备)[：:]\s*([^，,；;。]+)', seg)
+    tool_match = _TOOL_SPEC_PATTERN.search(seg)
+    if label_match:
+        equipment = label_match.group(1).strip()
+    elif tool_match:
+        equipment = tool_match.group(0)
+
+    # 参数扫描时先剔除刀具括号规格，避免 d=/l=/H01= 混入加工参数
+    seg_for_params = seg.replace(tool_match.group(0), '〔刀〕', 1) if tool_match else seg
+    parameters = [
+        f'{key.upper()}={value}'
+        for key, value in _OPERATION_PARAM_PATTERN.findall(seg_for_params)
+    ]
+    spindle = _SPINDLE_PATTERN.search(seg_for_params)
+    feed = _FEED_PATTERN.search(seg_for_params)
+    if spindle and not any(p.startswith('S=') for p in parameters):
+        parameters.append(f'S={spindle.group(1)}')
+    if feed and not any(p.startswith('F=') for p in parameters):
+        parameters.append(f'F={feed.group(1)}')
+
+    # content：截取到刀具/参数/转速中最先出现的位置
+    cut_positions = [
+        m.start() for m in [
+            label_match, tool_match,
+            _OPERATION_PARAM_PATTERN.search(seg_for_params),
+            _SPINDLE_PATTERN.search(seg_for_params), _FEED_PATTERN.search(seg_for_params),
+        ] if m
+    ]
+    content = (seg_for_params[:min(cut_positions)] if cut_positions else seg).strip(' ，,；;。至')
+
+    remark_match = re.search(r'(?:工艺说明|备注)[：:]\s*(.+)$', seg)
+    if remark_match:
+        remark = remark_match.group(1).strip()
+    else:
+        # 兜底：剔除刀具/转速/进给后剩余的描述文字（如「每层切深2mm」）
+        residue = seg_for_params
+        for m in (spindle, feed):
+            if m:
+                residue = residue.replace(m.group(0), '', 1)
+        residue = residue.replace('〔刀〕', '', 1)
+        if content:
+            residue = residue.replace(content, '', 1)
+        residue = re.sub(r'(?:r/min|rpm|mm/min)', '', residue)
+        remark = re.sub(r'^[，,；;。\s]+|[，,；;。\s]+$', '', re.sub(r'[，,；;]{2,}', '，', residue))
+
+    return {
+        'sequence': sequence,
+        'content': content,
+        'parameters': ', '.join(parameters),
+        'equipment': equipment,
+        'remark': remark,
+    }
+
 
 def extract_operations(text: str) -> list:
+    # 叙述式「工步N …」格式（可跨行）优先
+    if '工步' in text:
+        worded = [
+            _parse_worded_step(int(number), segment)
+            for number, segment in _WORDED_STEP_PATTERN.findall(text)
+            if segment.strip()
+        ]
+        if worded:
+            return worded
+
     operations = []
     for line in text.splitlines():
-        match = re.match(r'^\s*(?:工步\s*)?(\d+)[.、)）:\s]+(.+)$', line)
+        match = re.match(r'^\s*(\d+)[.、)）:\s]+(.+)$', line)
         if not match:
             continue
         raw_content = match.group(2).strip()
@@ -128,62 +200,11 @@ def natural_language_missing_fields(params: dict) -> list:
     return missing
 
 
-def natural_language_value_errors(params: dict) -> list:
-    errors = []
-    tool_name = str(params.get('tool_name') or '').strip()
-    for operation in params.get('operations') or []:
-        equipment = str(operation.get('equipment') or '').strip()
-        if equipment and tool_name and tool_name not in equipment:
-            errors.append({
-                'path': f"operations[{operation.get('sequence')}].equipment",
-                'label': '刀具/工艺装备',
-                'scope': 'operation',
-                'code': 'UNSUPPORTED_MULTI_TOOL',
-                'reason': '第一版自然语言流程只支持单刀具工序',
-            })
-        values = {
-            key.upper(): float(value)
-            for key, value in re.findall(r'([A-Z_]+)\s*=\s*([+-]?\d+(?:\.\d+)?)', operation.get('parameters', ''), re.I)
-        }
-        for key, value in values.items():
-            if key in {'X', 'X_END', 'RAMP_X'} and not 0 <= value <= 200:
-                errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': 'X坐标', 'scope': 'machine', 'code': 'OUT_OF_MACHINE_RANGE', 'reason': f'X={value}不在0..200范围内'})
-            if key in {'Y', 'Y_END', 'RAMP_Y'} and not 0 <= value <= 200:
-                errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': 'Y坐标', 'scope': 'machine', 'code': 'OUT_OF_MACHINE_RANGE', 'reason': f'Y={value}不在0..200范围内'})
-            if key == 'Z' and not 0 <= value <= 100:
-                errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': 'Z坐标', 'scope': 'machine', 'code': 'OUT_OF_MACHINE_RANGE', 'reason': f'Z={value}不在0..100范围内'})
-            if key in {'STEP', 'PECK'} and value <= 0:
-                errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': key, 'scope': 'operation', 'code': 'INVALID_PARAMETER_VALUE', 'reason': f'{key}必须大于0'})
-    return errors
-
-
 class ParameterExtractor:
-    def __init__(self):
-        self.api_key = settings.vision_ocr_api_key
+    """纯脚本（正则）提取器。按用户要求不使用 AI：确定性、毫秒级、离线可用。"""
 
-    async def extract(self, text: str) -> dict:
-        if not settings.vision_ocr_enabled or not is_configured_secret(self.api_key) or not settings.vision_ocr_model:
-            logger.warning("自然语言 AI 提取未启用（缺配置），回退本地正则")
-            return self._fallback_extract(text)
-        try:
-            return await self._extract_with_ai(text)
-        except Exception as e:
-            # 不静默：记录原因，避免模型故障被正则回退掩盖（见 ai_smoke.py 诊断记录）
-            logger.warning("自然语言 AI 提取失败(%s)，回退本地正则", type(e).__name__)
-            return self._fallback_extract(text)
-
-    async def _extract_with_ai(self, text: str) -> dict:
-        prompt = f"""
-你是机加工工序卡信息提取器。只提取用户文本明确出现的信息，不要猜测、补默认值或生成G代码。
-用户文本：
-{text}
-仅返回JSON，字段为 product_name、process_name、process_number、version、equipment、control_system、fixture、material、tool_name、tool_length、tool_diameter、cutting_fluid、operations。
-operations 每项包含 sequence、content、parameters、equipment、remark。无法确认的字段返回空字符串、0或空数组。
-"""
-        return await request_chat_completion_json([
-            {'role': 'system', 'content': '只做结构化提取，不补全缺失信息。'},
-            {'role': 'user', 'content': prompt},
-        ], timeout=30)
+    def extract(self, text: str) -> dict:
+        return self._fallback_extract(text)
 
     def _fallback_extract(self, text: str) -> dict:
         result = {field: '' for field in NATURAL_LANGUAGE_REQUIRED_FIELDS if field != 'operations'}
@@ -214,7 +235,27 @@ operations 每项包含 sequence、content、parameters、equipment、remark。�
             except (ValueError, TypeError):
                 result[field] = 0
         result['operations'] = self._extract_operations(text)
+        self._backfill_tool_from_operations(result)
         return result
+
+    def _backfill_tool_from_operations(self, result: dict) -> None:
+        """顶层刀具字段缺失时，从首个工步的「N号x刀（d=…，l=…）」规格回填（单刀具流程）。"""
+        if result['tool_name'] and result['tool_diameter'] and result['tool_length']:
+            return
+        for operation in result['operations']:
+            match = _TOOL_SPEC_PATTERN.search(operation.get('equipment') or '')
+            if not match:
+                continue
+            spec = match.group(2)
+            diameter = re.search(r'\bd\s*=\s*(\d+(?:\.\d+)?)', spec, re.I)
+            length = re.search(r'\bl\s*=\s*(\d+(?:\.\d+)?)', spec, re.I)
+            if not result['tool_name']:
+                result['tool_name'] = match.group(1).strip()
+            if not result['tool_diameter'] and diameter:
+                result['tool_diameter'] = float(diameter.group(1))
+            if not result['tool_length'] and length:
+                result['tool_length'] = float(length.group(1))
+            return
 
     def _extract_value(self, text: str, start_idx: int) -> str:
         end_chars = ['：', ':', '，', ',', '。', '.', '\n', ' ', '、']
@@ -290,8 +331,8 @@ operations 每项包含 sequence、content、parameters、equipment、remark。�
         return [self._drawing_step_to_operation(op, idx) for idx, op in enumerate(ops_data, 1)]
 
 
-async def extract_parameters(text: str) -> dict:
-    return await ParameterExtractor().extract(text)
+def extract_parameters(text: str) -> dict:
+    return ParameterExtractor().extract(text)
 
 
 def validate_and_convert(params: dict, use_defaults: bool = True) -> tuple:
@@ -348,10 +389,6 @@ def natural_language_missing_labels(params: dict) -> list:
 
 
 def natural_language_value_errors(params: dict) -> list:
-    return natural_language_value_errors_from_operations(params)
-
-
-def natural_language_value_errors_from_operations(params: dict) -> list:
     errors = []
     tool_name = str(params.get('tool_name') or '').strip()
     for operation in params.get('operations') or []:

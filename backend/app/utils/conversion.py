@@ -157,7 +157,7 @@ def confirm_natural_language_draft(draft: dict) -> tuple[Optional[ConvertData], 
 
 
 def merge_and_precheck(previous_draft: dict | None, message: str) -> dict:
-    extracted = __import__("asyncio").run(ParameterExtractor().extract(message))
+    extracted = ParameterExtractor().extract(message)
     previous = draft_to_params(previous_draft or {}) if previous_draft else {}
     params = merge_natural_language_draft(previous, extracted)
     params["field_sources"] = {

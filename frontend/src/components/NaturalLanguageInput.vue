@@ -10,13 +10,13 @@
         rows="10"
         @input="handleInput"
         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-all"
-        placeholder="例如：\n产品名称：底板\n工序名称：键槽加工\n工序编号：02\n版本号：A\n设备：立式加工中心（发那科MD）\n数控系统：FANUC-0iM\n夹具：平口钳装夹\n材料：铝合金6061\n刀具名称：键槽铣刀，长度：50mm，直径：8mm\n冷却方式：油冷\n1. 粗铣键槽，刀具：键槽铣刀，X=0, Y=0, Z=2, F=200，工艺说明：每层切深2mm"
+        :placeholder="placeholderText"
       ></textarea>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
       <div class="p-4 bg-green-50 border border-green-200 rounded-lg">
-        <h3 class="text-sm font-medium text-green-800 mb-2">已识别字段</h3>
+        <h3 class="text-sm font-medium text-green-800 mb-2">已识别字段<span class="font-normal text-green-500">（来自已提交内容的累计结果，与输入框灰色示例无关）</span></h3>
         <ul class="space-y-1">
           <li v-for="field in filledFields" :key="field" class="text-sm text-green-700">- {{ fieldMap[field] || field }}</li>
           <li v-if="filledFields.length === 0" class="text-sm text-green-400 italic">暂无已识别字段</li>
@@ -34,6 +34,12 @@
       </div>
     </div>
 
+    <div v-if="confirming" class="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm animate-pulse">
+      ⏳ 正在生成 G 代码，请稍候…
+    </div>
+    <div v-else-if="loading" class="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm animate-pulse">
+      ⏳ 正在检查工序卡…
+    </div>
     <div v-if="errorMessage" class="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
       {{ errorMessage }}
     </div>
@@ -78,6 +84,19 @@ import ProcessCardModal from './ProcessCardModal.vue'
 
 const emit = defineEmits(['convert'])
 
+const placeholderText = `例如：
+产品名称：底板
+工序名称：键槽加工
+工序编号：02
+版本号：A
+设备：立式加工中心（发那科MD）
+数控系统：FANUC-0iM
+夹具：平口钳装夹
+材料：铝合金6061
+刀具名称：键槽铣刀，长度：50mm，直径：8mm
+冷却方式：油冷
+工步1 粗铣键槽，刀具：键槽铣刀，X=0, Y=0, Z=2, F=200，工艺说明：每层切深2mm`
+
 const inputText = ref('')
 const loading = ref(false)
 const confirming = ref(false)
@@ -111,7 +130,6 @@ const submitDraft = async () => {
     missingFields.value = data.missing_fields || []
     statusMessage.value = data.message || ''
     inputText.value = ''
-    sessionStorage.setItem('natural-language-draft', JSON.stringify({ draft: draft.value, revision: revision.value, digest: digest.value }))
     if (data.status === 'ready_for_confirmation') showConfirmation.value = true
   } catch (error) {
     errorMessage.value = error.response?.data?.detail?.message || error.response?.data?.detail || '工序卡检查失败，请稍后重试'
@@ -129,7 +147,6 @@ const confirmDraft = async () => {
     if (response.data.success && response.data.data) {
       showConfirmation.value = false
       emit('convert', response.data.data)
-      sessionStorage.removeItem('natural-language-draft')
       statusMessage.value = 'G代码已生成，请完成规则审核和人工上机前检查。'
     } else {
       errorMessage.value = response.data.message || 'G代码未生成'
@@ -161,6 +178,5 @@ const handleClear = () => {
   statusMessage.value = ''
   errorMessage.value = ''
   showConfirmation.value = false
-  sessionStorage.removeItem('natural-language-draft')
 }
 </script>
