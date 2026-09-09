@@ -46,6 +46,11 @@
           :gcode="convertedData.gcode"
           :validation="convertedData.validation"
         />
+        <ToolpathRouteMap
+          :gcode="convertedData.gcode"
+          :validation="convertedData.validation"
+          title="刀路路线图"
+        />
       </div>
     </main>
   </div>
@@ -57,6 +62,7 @@ import NaturalLanguageInput from './components/NaturalLanguageInput.vue'
 import DrawingUpload from './components/DrawingUpload.vue'
 import StlUpload from './components/StlUpload.vue'
 import InlineGCodeViewer from './components/InlineGCodeViewer.vue'
+import ToolpathRouteMap from './components/ToolpathRouteMap.vue'
 
 const tabs = [
   { id: 'natural', name: '自然语言转换' },

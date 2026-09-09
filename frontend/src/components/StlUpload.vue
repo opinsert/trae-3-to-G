@@ -193,6 +193,44 @@
         <pre v-else class="text-xs font-mono text-gray-800 whitespace-pre-wrap">{{ directionGcodes[activeDirection] }}</pre>
       </div>
     </div>
+
+    <!-- 刀路路线图：范围切换 + 自动渲染大窗 -->
+    <div class="mt-4 flex items-center justify-between gap-3 flex-wrap shrink-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-sm font-medium text-gray-700">路线图范围：</span>
+        <button
+          @click="routeMode = 'all'"
+          :class="[
+            'px-3 py-1.5 text-xs rounded-lg border transition-colors',
+            routeMode === 'all'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
+          ]"
+        >
+          全部方向合并<span v-if="generatedDirCount">（{{ generatedDirCount }} 个方向）</span>
+        </button>
+        <button
+          @click="routeMode = 'single'"
+          :disabled="!directionGcodes[activeDirection]"
+          :class="[
+            'px-3 py-1.5 text-xs rounded-lg border transition-colors',
+            routeMode === 'single'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50',
+            !directionGcodes[activeDirection] ? 'opacity-50 cursor-not-allowed' : ''
+          ]"
+        >
+          当前方向（{{ directionLabels[activeDirection] || activeDirection }}）
+        </button>
+      </div>
+      <span class="text-xs text-yellow-700">全方向合并为多面加工叠加示意，不代表真实翻面装夹运动轨迹；正式核验请逐方向查看。</span>
+    </div>
+    <ToolpathRouteMap
+      :gcode="routeGcode"
+      :validation="routeValidation"
+      title="刀路路线图"
+      subtitle="路线图仅用于辅助检查 · 正式上机前仍需人工审核、空运行和试切"
+    />
   </div>
 </template>
 
@@ -202,6 +240,7 @@ import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { stlApi } from '../api'
+import ToolpathRouteMap from './ToolpathRouteMap.vue'
 
 const fileInput = ref(null)
 const stlFileName = ref('')
@@ -218,6 +257,7 @@ const directionGcodes = ref({})
 const operationsByDirection = ref({})
 const recommendedOrder = ref([])
 const activeDirection = ref('+Z')
+const routeMode = ref('all') // 'all' | 'single'：路线图范围
 const directionExplanation = ref('')
 const directionSource = ref('')
 const directionLabels = { '+Z': '顶面', '-Z': '底面', '+X': '右面', '-X': '左面', '+Y': '前面', '-Y': '后面' }
@@ -333,6 +373,35 @@ const masterRows = computed(() => {
   return rows
 })
 const totalOpCount = computed(() => masterRows.value.filter((row) => row.type === 'op').length)
+const generatedDirCount = computed(() => recommendedOrder.value.filter((dir) => directionGcodes.value[dir]).length)
+
+// 底部路线图数据：默认全方向合并，也可切换为只显示当前方向
+const routeGcode = computed(() => {
+  if (routeMode.value === 'single') return directionGcodes.value[activeDirection.value] || ''
+  const parts = []
+  for (const dir of recommendedOrder.value) {
+    const g = directionGcodes.value[dir]
+    if (!g) continue
+    parts.push(`; ============ 翻面装夹 ${directionLabels[dir] || dir} (${dir}) ============`)
+    parts.push(g.trim())
+  }
+  return parts.join('\n')
+})
+const routeValidation = computed(() => {
+  if (routeMode.value === 'all') {
+    // 合并视图为多方向叠加示意，仅提示、不阻断渲染
+    return {
+      valid: true,
+      errors: [],
+      warnings: [{
+        line: 0,
+        code: 'MERGED',
+        message: '多方向合并展示为叠加示意，不代表真实翻面装夹运动轨迹，正式核验请逐方向查看。'
+      }]
+    }
+  }
+  return directionValidations.value[activeDirection.value] || { valid: false, errors: [], warnings: [] }
+})
 
 const copyDirectionGcode = async (dir) => {
   if (!directionValidations.value[dir]?.valid || !directionGcodes.value[dir]) return

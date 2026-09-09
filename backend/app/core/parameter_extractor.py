@@ -116,6 +116,120 @@ def _parse_worded_step(sequence: int, segment: str) -> dict:
     }
 
 
+_TABLE_HEADER_ALIASES = {
+    'sequence': ('工步', '序号', '步骤', '工步号', '工序步骤'),
+    'content': ('操作内容', '工步内容', '加工内容', '工艺内容'),
+    'tool': ('刀具名称', '刀具', '工艺装备'),
+    'toolparam': ('刀具参数', '刀具规格', '刀具尺寸', '刀径'),
+    'speed': ('主轴转速', '转速'),
+    'feed': ('进给速度', '进给', '切削速度'),
+    'depth': ('切深', '背吃刀量', '被吃刀量', '切削深度'),
+    'remark': ('工艺要求', '工艺说明', '备注'),
+}
+
+_TABLE_NUM = re.compile(r'[-+]?\d+(?:\.\d+)?')
+
+
+def _extract_table_operations(text: str) -> list:
+    """识别 Markdown 表格形式的工步表：
+    | 工步 | 操作内容 | 刀具 | 刀具参数 | 主轴转速 | 进给速度 | 切深 | 工艺要求 |
+    | 1 | 粗铣键槽 | 1号键槽铣刀 | Ø6mm，L=50mm，H01 | 3000 r/min | 200 mm/min | ... | ... |
+    """
+    lines = [ln for ln in text.splitlines() if '|' in ln]
+    if not lines:
+        return []
+
+    def classify_header(cell):
+        if any(alias in cell for alias in _TABLE_HEADER_ALIASES['toolparam']):
+            return 'toolparam'
+        if any(alias in cell for alias in ('刀具名称', '工艺装备')) or cell.strip() == '刀具':
+            return 'tool'
+        if any(alias in cell for alias in _TABLE_HEADER_ALIASES['sequence']):
+            return 'sequence'
+        if any(alias in cell for alias in _TABLE_HEADER_ALIASES['content']):
+            return 'content'
+        if any(alias in cell for alias in _TABLE_HEADER_ALIASES['speed']):
+            return 'speed'
+        if any(alias in cell for alias in _TABLE_HEADER_ALIASES['feed']):
+            return 'feed'
+        if any(alias in cell for alias in _TABLE_HEADER_ALIASES['depth']):
+            return 'depth'
+        if any(alias in cell for alias in _TABLE_HEADER_ALIASES['remark']):
+            return 'remark'
+        return None
+
+    header_index = None
+    header_cells = None
+    roles = {}
+    for idx, line in enumerate(lines):
+        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        if len(cells) < 3:
+            continue
+        matched = {}
+        for j, cell in enumerate(cells):
+            role = classify_header(cell)
+            if role and role not in matched:
+                matched[role] = j
+        if 'sequence' in matched and 'content' in matched:
+            header_index = idx
+            header_cells = cells
+            roles = matched
+            break
+    if header_index is None:
+        return []
+
+    operations = []
+    for line in lines[header_index + 1:]:
+        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        if not cells or not cells[0]:
+            continue
+        if not _TABLE_NUM.fullmatch(cells[0].split(' ')[0]):
+            continue
+        seq = int(cells[0].split(' ')[0])
+        get = lambda role: (cells[roles[role]] if roles.get(role) is not None and roles.get(role) < len(cells) else '')
+
+        content = get('content').strip().rstrip('。')
+        if not content:
+            continue
+
+        tool = get('tool')
+        toolparam = get('toolparam')
+        equipment = tool if tool else ''
+        if tool and toolparam:
+            equipment = f'{tool}（{toolparam}）'
+        elif toolparam:
+            equipment = f'{toolparam}'
+
+        parameters = []
+        speed = get('speed')
+        feed = get('feed')
+        sm = _TABLE_NUM.search(speed) if speed else None
+        fm = _TABLE_NUM.search(feed) if feed else None
+        if sm:
+            parameters.append(f'S={sm.group()}')
+        if fm:
+            parameters.append(f'F={fm.group()}')
+
+        depth = get('depth')
+        depth_m = re.search(r'Z\s*=\s*(-?\d+(?:\.\d+)?)', depth) if depth else None
+        remark_parts = []
+        if depth and not depth_m:
+            remark_parts.append(depth.strip())
+        req = get('remark')
+        if req:
+            remark_parts.append(req.strip())
+        remark = '；'.join(p for p in remark_parts if p)
+
+        operations.append({
+            'sequence': seq,
+            'content': content,
+            'parameters': ', '.join(parameters),
+            'equipment': equipment,
+            'remark': remark,
+        })
+    return operations
+
+
 def extract_operations(text: str) -> list:
     # 叙述式「工步N …」格式（可跨行）优先
     if '工步' in text:
@@ -148,7 +262,9 @@ def extract_operations(text: str) -> list:
             'equipment': equipment_match.group(1).strip() if equipment_match else '',
             'remark': remark_match.group(1).strip() if remark_match else '',
         })
-    return operations
+    if operations:
+        return operations
+    return _extract_table_operations(text)
 
 
 def _is_missing(value, numeric=False):
@@ -203,6 +319,66 @@ def natural_language_missing_fields(params: dict) -> list:
     return missing
 
 
+# 键槽特征→刀路坐标自动推算（纯脚本、确定性）：
+# 依据「毛坯尺寸 W×L×H」与「键槽尺寸 宽×深×长」，把居中对称键槽换算成每个工步的 X/Y 区间与 Z 深度。
+def infer_slot_geometry(message: str, params: dict) -> None:
+    operations = params.get('operations') or []
+    if not operations:
+        return
+
+    slot_match = re.search(
+        r'键槽尺寸[^0-9]{0,20}宽\s*([\d.]+)\s*[^0-9]{0,8}深\s*([\d.]+)\s*[^0-9]{0,8}长\s*([\d.]+)',
+        message, re.I,
+    )
+    blank_match = re.search(
+        r'毛坯尺寸[^0-9]{0,20}([\d.]+)\s*[×xX*]\s*([\d.]+)\s*[×xX*]\s*([\d.]+)',
+        message, re.I,
+    )
+    if not slot_match or not blank_match:
+        return
+    slot_w, slot_depth, slot_len = (float(v) for v in slot_match.groups())
+    blank_x, blank_y = float(blank_match.group(1)), float(blank_match.group(2))
+    if not (slot_w > 0 and slot_depth > 0 and slot_len > 0 and blank_x > 0 and blank_y > 0):
+        return
+    if slot_len > blank_x or slot_w > blank_y:
+        return
+
+    x0 = (blank_x - slot_len) / 2
+    x1 = x0 + slot_len
+    y0 = (blank_y - slot_w) / 2
+    y1 = y0 + slot_w
+
+    slot_context = any(('键槽' in (o.get('content') or '') or '槽' in (o.get('content') or '')) for o in operations)
+    for operation in operations:
+        content = operation.get('content') or ''
+        is_keyway = '键槽' in content or '槽' in content
+        is_edge_chamfer = ('去毛刺' in content or '倒角' in content) and slot_context
+        if not is_keyway and not is_edge_chamfer:
+            continue
+        params_now = operation.get('parameters') or ''
+        if re.search(r'(?:^|,)\s*X\s*=', params_now, re.I):
+            continue  # 已有坐标，不覆盖
+
+        extra = []
+        sm = re.search(r'\bS\s*=\s*[\d.]+', params_now, re.I)
+        fm = re.search(r'\bF\s*=\s*[\d.]+', params_now, re.I)
+        if sm:
+            extra.append(sm.group().strip())
+        if fm:
+            extra.append(fm.group().strip())
+
+        if is_edge_chamfer:
+            z = -0.2
+            extra.append('R=0.2')
+        else:
+            z = -slot_depth
+        parts = [
+            f'X={x0:.1f}', f'Y={y0:.1f}', f'X_END={x1:.1f}', f'Y_END={y1:.1f}', f'Z={z:.1f}',
+            *extra,
+        ]
+        operation['parameters'] = ', '.join(parts)
+
+
 class ParameterExtractor:
     """纯脚本（正则）提取器。按用户要求不使用 AI：确定性、毫秒级、离线可用。"""
 
@@ -232,14 +408,44 @@ class ParameterExtractor:
                 if match:
                     result[field] = match.group(1).strip()
                     break
+        self._apply_card_table_fields(text, result)
         for field in ('tool_length', 'tool_diameter'):
-            try:
-                result[field] = float(result[field]) if result[field] else 0
-            except (ValueError, TypeError):
-                result[field] = 0
+            number = re.search(r'-?\d+(?:\.\d+)?', str(result[field] or ''))
+            result[field] = float(number.group()) if number else 0
         result['operations'] = self._extract_operations(text)
         self._backfill_tool_from_operations(result)
         return result
+
+    # 「| 字段 | 值 |」两列表格（Markdown / 粘贴表格）
+    def _apply_card_table_fields(self, text: str, result: dict) -> None:
+        table_labels = {
+            'product_name': ('产品名称',),
+            'process_name': ('工序名称',),
+            'process_number': ('工序编号', '工序号'),
+            'version': ('版本号', '版本'),
+            'equipment': ('设备名称', '设备'),
+            'control_system': ('数控系统',),
+            'fixture': ('夹具名称', '夹具'),
+            'material': ('材料名称', '材料'),
+            'tool_name': ('刀具名称', '刀具'),
+            'tool_length': ('刀具长度', '长度'),
+            'tool_diameter': ('刀具直径', '直径'),
+            'cutting_fluid': ('冷却方式', '切削液'),
+        }
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith('|'):
+                continue
+            cells = [re.sub(r'[*`]', '', c).strip() for c in stripped.strip('|').split('|')]
+            if len(cells) < 2:
+                continue
+            label = cells[0].strip()
+            if not label or not cells[1]:
+                continue
+            for field, names in table_labels.items():
+                if label in names:
+                    result[field] = cells[1].strip()
+                    break
 
     def _backfill_tool_from_operations(self, result: dict) -> None:
         """顶层刀具字段缺失时，从首个工步的「N号x刀（d=…，l=…）」规格回填。"""
@@ -250,8 +456,13 @@ class ParameterExtractor:
             if not match:
                 continue
             spec = match.group(2)
-            diameter = re.search(r'\bd\s*=\s*(\d+(?:\.\d+)?)', spec, re.I)
+            diameter = re.search(r'(?:Ø|Φ)?\s*\bd\s*=\s*(\d+(?:\.\d+)?)', spec, re.I)
             length = re.search(r'\bl\s*=\s*(\d+(?:\.\d+)?)', spec, re.I)
+            if not diameter:
+                # 兼容「Ø6mm，L=50mm」这类表格写法（第一个 Ø 数值即直径）
+                diameter = re.search(r'(?:Ø|Φ)\s*(\d+(?:\.\d+)?)', spec, re.I)
+            if not length:
+                length = re.search(r'[Ll]\s*=\s*(\d+(?:\.\d+)?)', spec)
             if not result['tool_name']:
                 result['tool_name'] = match.group(1).strip()
             if not result['tool_diameter'] and diameter:
@@ -400,7 +611,7 @@ def natural_language_value_errors(params: dict) -> list:
                 errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': 'X坐标', 'scope': 'machine', 'code': 'OUT_OF_MACHINE_RANGE', 'reason': f'X={value}不在0..200范围内'})
             if key in {'Y', 'Y_END', 'RAMP_Y'} and not 0 <= value <= 200:
                 errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': 'Y坐标', 'scope': 'machine', 'code': 'OUT_OF_MACHINE_RANGE', 'reason': f'Y={value}不在0..200范围内'})
-            if key == 'Z' and not 0 <= value <= 100:
+            if key == 'Z' and not -100 <= value <= 100:
                 errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': 'Z坐标', 'scope': 'machine', 'code': 'OUT_OF_MACHINE_RANGE', 'reason': f'Z={value}不在0..100范围内'})
             if key in {'STEP', 'PECK'} and value <= 0:
                 errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': key, 'scope': 'operation', 'code': 'INVALID_PARAMETER_VALUE', 'reason': f'{key}必须大于0'})
@@ -519,3 +730,125 @@ async def ai_complete_missing_fields(text: str, params: dict) -> dict:
     if op_updates:
         merged["operations"] = op_updates
     return merged
+
+
+# ---------------------------------------------------------------------------
+# AI 整卡解读（三段式第 2 段）：脚本覆盖率不足时，让 AI 从自由文本补齐
+# 顶层字段 + 工步文字。AI 输出只作候选，由调用方合并后再走规则校验与几何推算。
+# ---------------------------------------------------------------------------
+
+_AI_FULL_CARD_SYSTEM_PROMPT = (
+    "你是 CNC 工序卡信息提取助手。下面是机加工描述文本，可能口语化、格式不规范。"
+    "允许近义词/变体：刀径/刃径→tool_diameter，刀长/刃长→tool_length，"
+    "键槽铣刀/棒铣刀/铣槽刀→tool_name，转速/rpm/转/分→工步 S，进给/进给速度/mm每分钟→工步 F。\n"
+    "严格规则：\n"
+    "1. 只提取文本里**明确出现**的信息，禁止猜测、禁止补默认值；\n"
+    "2. 顶层字段键名限定为：product_name, process_name, process_number, version, "
+    "equipment, control_system, fixture, material, tool_name, tool_length, tool_diameter, cutting_fluid；\n"
+    "3. 工步输出为 operations 数组，每项 {sequence, content, equipment, remark}；"
+    "只列出文本明确叙述的加工动作；\n"
+    "4. 禁止输出任何坐标（X/Y/Z 等）、禁止输出 G 代码、禁止设计工序与刀路；\n"
+    "5. 只输出 JSON。"
+)
+
+_ACTION_HINTS = ('铣', '钻', '切', '镗', '铰', '攻', '倒角', '去毛刺', '车', '磨', '槽', '孔', '加工', '工序')
+
+
+def _has_machining_action(text: str) -> bool:
+    return any(hint in text for hint in _ACTION_HINTS)
+
+
+def ai_full_card_needed(text: str, params: dict):
+    """判定是否需要 AI 整卡解读。返回 None 表示不需要（网关关闭 / 无缺失 / 无加工动作）。"""
+    from app.utils.ai_gateway import is_ai_gateway_configured
+
+    if not is_ai_gateway_configured():
+        return None
+    missing_labels = natural_language_missing_labels(params)
+    if not missing_labels:
+        return None
+    top_level = [m["path"] for m in missing_labels if "[" not in m["path"] and m["path"] != "operations"]
+    op_paths = [m["path"] for m in missing_labels if m["path"].startswith("operations[")]
+    return {
+        "missing_labels": missing_labels,
+        "top_level": top_level,
+        "operation_paths": op_paths,
+        "allow_operations": _has_machining_action(text),
+    }
+
+
+def filter_ai_full_card(result: dict, need: dict) -> dict:
+    """把 AI 返回的整卡 JSON 过滤成“候选补充”：只留缺失顶层 + 允许的工步文字。"""
+    if not isinstance(result, dict):
+        return {}
+
+    top_keys = set(need.get("top_level") or [])
+    filtered = {}
+    for key in top_keys:
+        value = result.get(key)
+        if value in (None, "", 0, []):
+            continue
+        filtered[key] = str(value).strip()
+
+    for key in ('tool_length', 'tool_diameter'):
+        if key in filtered:
+            number = re.search(r'-?\d+(?:\.\d+)?', filtered[key])
+            if number:
+                filtered[key] = float(number.group())
+            else:
+                filtered.pop(key, None)
+
+    if not need.get("allow_operations"):
+        return filtered
+
+    ops = []
+    for item in result.get("operations") or []:
+        if not isinstance(item, dict):
+            continue
+        content = str(item.get("content") or '').strip().rstrip('。')
+        if not content:
+            continue
+        try:
+            sequence = int(item.get("sequence"))
+        except (ValueError, TypeError):
+            sequence = len(ops) + 1
+        op = {'sequence': sequence, 'content': content}
+        equipment = str(item.get("equipment") or '').strip()
+        remark = str(item.get("remark") or '').strip()
+        if equipment:
+            op['equipment'] = equipment
+        if remark:
+            op['remark'] = remark
+        ops.append(op)
+    if ops:
+        filtered['operations'] = ops
+    return filtered
+
+
+async def ai_extract_full_card_extra(text: str, params: dict) -> dict:
+    """三段式第 2 段：AI 整卡解读，返回可合并的“候选”字段（空 dict = 无需/失败/降级）。"""
+    from app.utils.ai_gateway import request_chat_completion_json
+
+    need = ai_full_card_needed(text, params)
+    if not need:
+        return {}
+
+    label_lines = "\n".join(f'- {m["label"]}（路径 {m["path"]}）' for m in need["missing_labels"])
+    prompt = (
+        f"请理解下面这份机加工描述文本，按系统要求补全工序卡信息。\n\n"
+        f"【文本】\n{text}\n\n"
+        f"【当前仍缺失的字段】\n{label_lines}\n\n"
+        "按系统 JSON 规则输出。"
+    )
+    try:
+        result = await request_chat_completion_json(
+            [
+                {"role": "system", "content": _AI_FULL_CARD_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            timeout=60,
+        )
+    except Exception as exc:  # noqa: BLE001 - AI 是增强项，失败不影响主流程
+        logger.warning("AI 整卡解读失败(%s)，保留脚本提取结果", type(exc).__name__)
+        return {}
+    return filter_ai_full_card(result, need)

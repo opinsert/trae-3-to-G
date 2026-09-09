@@ -153,6 +153,8 @@ const confirmDraft = async () => {
     if (response.data.success && response.data.data) {
       showConfirmation.value = false
       emit('convert', response.data.data)
+      // 生成成功后保留用户输入，便于修改再次生成；需要新内容时可点“清空”
+      if (lastSubmittedText.value) inputText.value = lastSubmittedText.value
       statusMessage.value = 'G代码已生成，已显示在下方，请完成规则审核和人工上机前检查。'
     } else {
       confirmErrors.value = response.data.errors || []

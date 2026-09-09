@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     vision_ocr_model: str = "gpt-5.6-terra"
     vision_ocr_timeout: int = 60
     vision_ocr_enabled: bool = True
+    # AI 思考强度（reasoning_effort）：''=不传；支持时写 low/medium/high
+    ai_reasoning_effort: str = ""
     port: int = 8000
     app_name: str = "GCode Converter"
     app_version: str = "1.0.0"

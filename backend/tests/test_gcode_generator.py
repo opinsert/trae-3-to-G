@@ -259,3 +259,18 @@ def test_deburring_is_supported_chamfer_type_with_x_y_r():
 
     complete = [Operation(sequence=3, content="去毛刺", parameters="X=30, Y=21, R=0.2, F=200", equipment="", remark="")]
     assert missing_operation_parameters(complete) == []
+
+
+def test_multi_step_tool_change_emits_swap_blocks():
+    """多工步各自声明 N号刀具时，应在步骤间生成 Tnn M06 / G43 Hnn 换刀块。"""
+    card = make_process_card()
+    ops = [
+        make_operation(1, "粗加工", "X=5, Y=5, Z=-2, F=200", equipment="1号立铣刀（Ø6 mm）"),
+        make_operation(2, "精加工", "X=5, Y=5, Z=-5, F=100", equipment="2号立铣刀（Ø8 mm）"),
+    ]
+    gcode = generate_gcode(card, ops)
+    assert "T01 M06" in gcode
+    assert "T02 M06" in gcode
+    assert "G43 H02" in gcode
+    # 每步保留自己的刀具，而不是只用第一把
+    assert gcode.index("T01 M06") < gcode.index("T02 M06")

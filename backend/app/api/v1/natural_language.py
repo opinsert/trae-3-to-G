@@ -4,10 +4,10 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 
 from app.core.parameter_extractor import (
-    ai_complete_missing_fields,
-    ai_complete_missing_fields_sync,
+    ai_extract_full_card_extra,
     draft_to_params,
     extract_parameters,
+    infer_slot_geometry,
     merge_natural_language_draft,
 )
 from app.models.schemas import (
@@ -36,6 +36,8 @@ async def precheck_natural_language(request: NaturalLanguagePrecheckRequest):
         extracted = extract_parameters(request.message)
         previous = draft_to_params(request.draft or {})
         params = merge_natural_language_draft(previous, extracted)
+        # 表格/文本给出了键槽与毛坯尺寸但没有坐标时，自动推算居中键槽的刀路坐标
+        infer_slot_geometry(request.message, params)
         params["field_sources"] = {
             **(previous.get("field_sources") or {}),
             **{
@@ -44,12 +46,12 @@ async def precheck_natural_language(request: NaturalLanguagePrecheckRequest):
                 if field != "operations" and value not in (None, "", 0)
             },
         }
-        # 混合理解：脚本未识别的缺失字段（近义词/尺寸变体）交由 AI 定向补全。
-        # 无缺失或不满足 AI 配置时保持纯脚本结果（毫秒级路径不受影响）。
-        if ai_complete_missing_fields_sync(request.message, params):
-            ai_extra = await ai_complete_missing_fields(request.message, params)
-            if ai_extra:
-                params = merge_natural_language_draft(params, ai_extra)
+        # 三段式：脚本已抽 → AI 整卡解读补足缺失（仅文本含加工动作时允许补工步文字）→ 规则复核
+        # AI 网关未配置/失败时返回 {}，保持纯脚本结果（毫秒级路径不受影响）。
+        ai_extra = await ai_extract_full_card_extra(request.message, params)
+        if ai_extra:
+            params = merge_natural_language_draft(params, ai_extra)
+            infer_slot_geometry(request.message, params)
 
         result = natural_language_precheck(params)
         revision = request.revision + 1

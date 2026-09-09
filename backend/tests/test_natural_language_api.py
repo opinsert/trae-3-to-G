@@ -132,3 +132,58 @@ def test_ai_completion_not_triggered_when_only_operations_missing():
         extra = asyncio.run(ai_complete_missing_fields(text, base))
     assert extra == {}
     mocked.assert_not_awaited()
+
+
+def test_markdown_table_slot_with_negative_z_is_ready_for_confirmation():
+    """表格+键槽负深度（Z=-5）应通过值域校验并可直接确认。"""
+    from app.core.parameter_extractor import extract_parameters, infer_slot_geometry
+    from app.utils.conversion import natural_language_precheck
+
+    text = """| 项目 | 内容 |
+| --- | --- |
+| 工序名称 | 键槽加工 |
+| 产品名称 | 底板 |
+| 工序编号 | 02 |
+| 版本号 | A |
+| 材料 | 铝合金6061 |
+| 设备 | 立式加工中心 |
+| 数控系统 | FANUC-0iM |
+| 夹具 | 平口钳 |
+| 冷却方式 | 油冷 |
+| 毛坯尺寸 | 100 × 50 × 20 mm |
+| 键槽尺寸 | 宽 8 mm × 深 5 mm × 长 40 mm |
+| 工步 | 操作内容 | 刀具 | 刀具参数 | 主轴转速 | 进给速度 | 工艺要求 |
+| 1 | 粗铣键槽 | 1号键槽铣刀 | Ø6 mm，L=50 mm，H01 | 3000 r/min | 200 mm/min | 留余量 |
+| 2 | 精铣键槽 | 2号键槽铣刀 | Ø8 mm，L=60 mm，H02 | 4000 r/min | 100 mm/min | 保证槽宽深度 |
+| 3 | 去毛刺、倒角 | 3号倒角刀 | Ø10 mm，L=80 mm，H03 | 2000 r/min | 200 mm/min | 倒角0.2mm |"""
+    params = extract_parameters(text)
+    infer_slot_geometry(text, params)
+    pre = natural_language_precheck(params)
+    assert pre["status"] == "ready_for_confirmation", pre["missing_fields"]
+    assert "Z=-5.0" in params["operations"][0]["parameters"]
+
+
+@pytest.mark.asyncio
+async def test_ai_full_card_skipped_when_gateway_off():
+    from app.core.parameter_extractor import ai_extract_full_card_extra
+
+    with patch("app.utils.ai_gateway.is_ai_gateway_configured", return_value=False):
+        extra = await ai_extract_full_card_extra("产品名称：底板", {"product_name": ""})
+    assert extra == {}
+
+
+@pytest.mark.asyncio
+async def test_ai_full_card_never_invents_operations_without_machining_action():
+    from app.core.parameter_extractor import ai_extract_full_card_extra
+
+    text = "产品名称：底板 材料：铝合金6061"
+    base = {"product_name": "", "material": "", "operations": []}
+    with patch("app.utils.ai_gateway.is_ai_gateway_configured", return_value=True), \
+         patch("app.utils.ai_gateway.request_chat_completion_json",
+               new=AsyncMock(return_value={
+                   "product_name": "底板",
+                   "operations": [{"sequence": 1, "content": "铣槽"}],
+               })):
+        extra = await ai_extract_full_card_extra(text, base)
+    assert extra.get("product_name") == "底板"
+    assert "operations" not in extra

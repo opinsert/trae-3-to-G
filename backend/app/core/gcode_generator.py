@@ -102,6 +102,9 @@ class GCodeGenerator:
         self.gcode_lines = []
         self.process_card = None
         self.machine_profile = machine_profile or MachineProfile()
+        self._active_tool = None
+        self._active_spindle = None
+        self._tool_summary = None
     
     def generate(self, process_card: ProcessCard, operations: list) -> str:
         missing = missing_operation_parameters(operations)
@@ -110,6 +113,7 @@ class GCodeGenerator:
 
         self.gcode_lines = []
         self.process_card = process_card
+        self._tool_summary = self._describe_used_tools(operations)
 
         self._add_header(process_card)
         self._add_initialization()
@@ -129,7 +133,10 @@ class GCodeGenerator:
         self.gcode_lines.append(f"; 数控系统: {process_card.control_system}")
         self.gcode_lines.append(f"; 夹具: {process_card.fixture}")
         self.gcode_lines.append(f"; 材料: {process_card.material}")
-        if process_card.tool_info:
+        if self._tool_summary:
+            # 多工步各自带刀：按步骤列出每把刀与规格，避免“刀名三把/尺寸却只写第一把”
+            self.gcode_lines.append(f"; 刀具: {self._tool_summary}")
+        elif process_card.tool_info:
             self.gcode_lines.append(f"; 刀具: {process_card.tool_info.name} (直径:{process_card.tool_info.diameter}mm, 长度:{process_card.tool_info.length}mm)")
         self.gcode_lines.append("; 仿真模式：仅供验证与人工审核，不可直接上机")
         self.gcode_lines.append(f"; 单位: {self.machine_profile.length_unit} | 进给: {self.machine_profile.feed_mode} mm/min")
@@ -142,10 +149,13 @@ class GCodeGenerator:
         self.gcode_lines.append("T01 M06")
         self.gcode_lines.append(f"G43 H01 Z{p.retract_z:.3f} M08")
         self.gcode_lines.append(f"M03 S{p.default_spindle_rpm:.0f}")
+        self._active_tool = 1
+        self._active_spindle = int(round(p.default_spindle_rpm))
         self.gcode_lines.append(f"G00 Z{p.retract_z:.3f}")
         self.gcode_lines.append("")
     
     def _add_operation(self, op: Operation):
+        self._ensure_tool_for_op(op)
         self.gcode_lines.append(f"; 步骤{op.sequence}: {op.content}")
         self.gcode_lines.append(f"; 参数: {op.parameters}")
 
@@ -161,6 +171,13 @@ class GCodeGenerator:
             self._generate_floor_finish(op)
         elif "铣平面" in content or "平面铣" in content or "面铣" in content:
             self._generate_face_milling(op)
+        elif "键槽" in content or "槽铣" in content:
+            params = parse_operation_parameters(op.parameters)
+            is_finish = ("精" in content) and ("粗" not in content)
+            if is_finish or "精铣" in content:
+                self._generate_slot_finish(op)
+            else:
+                self._generate_slot_rough(op)
         elif "轮廓" in content or "外形" in content:
             self._generate_profile_milling(op)
         elif "钻孔" in content or "打孔" in content:
@@ -172,7 +189,11 @@ class GCodeGenerator:
         elif "镗孔" in content or "镗削" in content:
             self._generate_boring(op)
         elif "倒角" in content or "去毛刺" in content:
-            self._generate_chamfering(op)
+            slot_params = parse_operation_parameters(op.parameters)
+            if slot_params.get("X_END") is not None and slot_params.get("Y_END") is not None:
+                self._generate_slot_chamfer(op)
+            else:
+                self._generate_chamfering(op)
         elif "螺纹" in content:
             self._generate_thread_milling(op)
         elif "深孔" in content:
@@ -731,6 +752,191 @@ class GCodeGenerator:
             y += step
             self.gcode_lines.append(f"G01 Y{min(y, y_end):.3f} F300")
             direction *= -1
+
+    # ---- 键槽（slot）刀路：粗铣 / 精铣 / 去毛刺倒角 ----
+    # 参数约定（X,Y 为槽左下角，X_END,Y_END 为右上角，Z 为最终深度，负值向下）
+
+    def _describe_used_tools(self, operations: list) -> str:
+        """从工步 equipment 汇总每把刀（按刀号去重）：T01 1号键槽铣刀（Ø6 mm，…）；T02 …"""
+        seen = {}
+        order = []
+        for op in operations or []:
+            eq = op.equipment or '' if hasattr(op, 'equipment') else (op.get('equipment') or '')
+            match = re.search(r'(\d{1,2})\s*号\s*([^（(]*)', eq)
+            if not match:
+                continue
+            number = int(match.group(1))
+            if number in seen:
+                continue
+            name = (match.group(1) + '号' + match.group(2)).strip()
+            spec = re.search(r'[（(]([^）)]*)[）)]', eq)
+            text = f'T{number:02d} {name}（{spec.group(1).strip()}）' if spec else f'T{number:02d} {name}'
+            seen[number] = text
+            order.append(text)
+        return '；'.join(order)
+
+    def _op_tool_number(self, op: Operation):
+        match = re.search(r'(\d{1,2})\s*号', op.equipment or '')
+        return int(match.group(1)) if match else None
+
+    def _ensure_tool_for_op(self, op: Operation):
+        """按工步声明的刀具（如“1号键槽铣刀…/2号…/3号…”）执行换刀与转速切换。
+
+        多工步各自带不同刀具时不再全程使用同一把卡刀具。
+        """
+        number = self._op_tool_number(op)
+        if not number:
+            return
+        params = parse_operation_parameters(op.parameters)
+        spindle = int(round(float(params.get('S')))) if params.get('S') else None
+
+        if number != self._active_tool:
+            self.gcode_lines.append(f"T{number:02d} M06")
+            self.gcode_lines.append(f"G43 H{number:02d} Z{self.machine_profile.retract_z:.3f}")
+            self._active_tool = number
+        if spindle and spindle != self._active_spindle:
+            self.gcode_lines.append(f"M03 S{spindle}")
+            self._active_spindle = spindle
+
+    def _op_tool_diameter(self, op: Operation) -> float:
+        match = re.search(r'(?:Ø|Φ)\s*([\d.]+)', op.equipment or '', re.I)
+        if not match:
+            match = re.search(r'(?:d\s*=\s*)([\d.]+)', op.equipment or '', re.I)
+        if match:
+            return float(match.group(1))
+        if self.process_card and self.process_card.tool_info:
+            return float(self.process_card.tool_info.diameter or 0)
+        return 6.0
+
+    def _slot_axis(self, op: Operation):
+        params = parse_operation_parameters(op.parameters)
+        x0 = params.get('X', 0)
+        y0 = params.get('Y', 0)
+        x1 = params.get('X_END', x0)
+        y1 = params.get('Y_END', y0)
+        long_x = abs(x1 - x0) >= abs(y1 - y0)
+        return {
+            'params': params,
+            'long_x': long_x,
+            'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1,
+        }
+
+    def _slot_layers(self, depth: float):
+        """按每层≤3mm 切深拆层，从 -2 向下逼近最终深度。"""
+        layers = []
+        remaining = -depth
+        step = 2.0
+        current = -step
+        while current > depth + 1e-9:
+            layers.append(max(current, depth))
+            current -= step
+        if not layers:
+            layers = [depth]
+        return layers
+
+    def _generate_slot_rough(self, op: Operation):
+        """键槽粗铣：沿槽长方向分层走刀，刀具留 0.5mm 精铣余量。"""
+        box = self._slot_axis(op)
+        params = box['params']
+        x0, y0, x1, y1 = box['x0'], box['y0'], box['x1'], box['y1']
+        depth = min(params.get('Z', -5), 0)
+        feed = params.get('F', 200)
+        tool_d = self._op_tool_diameter(op)
+        tool_r = tool_d / 2
+
+        long_x = box['long_x']
+        # 长轴方向 A（起点→终点），槽宽在垂直方向 P（p_start..p_end）
+        a_start = x0 if long_x else y0
+        a_end = x1 if long_x else y1
+        p_center = ((y0 + y1) / 2) if long_x else ((x0 + x1) / 2)
+        slot_w = (y1 - y0) if long_x else (x1 - x0)
+
+        finish_allow = 0.5
+        rough_half = max(0.0, slot_w / 2 - finish_allow)
+        offset_max = max(0.0, rough_half - tool_r)
+        offsets = []
+        off = -offset_max
+        while off <= offset_max + 1e-6:
+            offsets.append(round(off, 3))
+            off += max(tool_d * 0.7, 0.1)
+        if not offsets:
+            offsets = [0]
+
+        self.gcode_lines.append(f"; 键槽粗铣（槽宽{slot_w:.1f}mm, 深度{abs(depth):.1f}mm, 留精铣余量{finish_allow:.1f}mm）")
+        for layer in self._slot_layers(depth):
+            for off in offsets:
+                p = p_center + off
+                ramp = min(4.0, abs(a_end - a_start) / 2)
+                if long_x:
+                    self.gcode_lines.append(f"G00 X{a_start:.3f} Y{p:.3f}")
+                    self.gcode_lines.append("G01 Z5.0 F500")
+                    if layer < 0:
+                        self.gcode_lines.append(f"G01 X{a_start + ramp:.3f} Y{p:.3f} Z{layer:.3f} F150")
+                        self.gcode_lines.append(f"G01 X{a_end:.3f} Y{p:.3f} F{feed}")
+                    else:
+                        self.gcode_lines.append(f"G01 Z{layer:.3f} F{feed}")
+                        self.gcode_lines.append(f"G01 X{a_end:.3f} Y{p:.3f} F{feed}")
+                else:
+                    self.gcode_lines.append(f"G00 X{p:.3f} Y{a_start:.3f}")
+                    self.gcode_lines.append("G01 Z5.0 F500")
+                    if layer < 0:
+                        self.gcode_lines.append(f"G01 X{p:.3f} Y{a_start + ramp:.3f} Z{layer:.3f} F150")
+                        self.gcode_lines.append(f"G01 X{p:.3f} Y{a_end:.3f} F{feed}")
+                    else:
+                        self.gcode_lines.append(f"G01 Z{layer:.3f} F{feed}")
+                        self.gcode_lines.append(f"G01 X{p:.3f} Y{a_end:.3f} F{feed}")
+                self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
+
+    def _generate_slot_finish(self, op: Operation):
+        """键槽精铣：槽中心线到底分层，刀具直径=槽宽时一次成型侧壁。"""
+        box = self._slot_axis(op)
+        params = box['params']
+        x0, y0, x1, y1 = box['x0'], box['y0'], box['x1'], box['y1']
+        depth = min(params.get('Z', -5), 0)
+        feed = params.get('F', 120)
+        center = (y0 + y1) / 2 if box['long_x'] else (x0 + x1) / 2
+
+        self.gcode_lines.append(f"; 键槽精铣 最终Z={depth:.2f}")
+        for layer in self._slot_layers(depth):
+            if box['long_x']:
+                self.gcode_lines.append(f"G00 X{x0:.3f} Y{center:.3f}")
+                self.gcode_lines.append("G01 Z5.0 F500")
+                ramp = min(4.0, abs(x1 - x0) / 2)
+                if layer < 0:
+                    self.gcode_lines.append(f"G01 X{x0 + ramp:.3f} Y{center:.3f} Z{layer:.3f} F150")
+                    self.gcode_lines.append(f"G01 X{x1:.3f} Y{center:.3f} F{feed}")
+                else:
+                    self.gcode_lines.append(f"G01 Z{layer:.3f} F{feed}")
+                    self.gcode_lines.append(f"G01 X{x1:.3f} Y{center:.3f} F{feed}")
+                self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
+            else:
+                self.gcode_lines.append(f"G00 X{center:.3f} Y{y0:.3f}")
+                self.gcode_lines.append("G01 Z5.0 F500")
+                ramp = min(4.0, abs(y1 - y0) / 2)
+                if layer < 0:
+                    self.gcode_lines.append(f"G01 X{center:.3f} Y{y0 + ramp:.3f} Z{layer:.3f} F150")
+                    self.gcode_lines.append(f"G01 X{center:.3f} Y{y1:.3f} F{feed}")
+                else:
+                    self.gcode_lines.append(f"G01 Z{layer:.3f} F{feed}")
+                    self.gcode_lines.append(f"G01 X{center:.3f} Y{y1:.3f} F{feed}")
+                self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
+
+    def _generate_slot_chamfer(self, op: Operation):
+        """键槽顶部去毛刺倒角：沿槽口周边在 Z≈-0.2 走一圈。"""
+        box = self._slot_axis(op)
+        params = box['params']
+        x0, y0, x1, y1 = box['x0'], box['y0'], box['x1'], box['y1']
+        depth = min(params.get('Z', -0.2), 0)
+        feed = params.get('F', 200)
+
+        points = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] if box['long_x'] else [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]
+        self.gcode_lines.append(f"; 键槽周边去毛刺倒角（深度{depth:.2f}）")
+        self.gcode_lines.append(f"G00 X{points[0][0]:.3f} Y{points[0][1]:.3f}")
+        self.gcode_lines.append("G01 Z1.0 F500")
+        self.gcode_lines.append(f"G01 Z{depth:.3f} F150")
+        for (px, py) in points[1:]:
+            self.gcode_lines.append(f"G01 X{px:.3f} Y{py:.3f} F{feed}")
+        self.gcode_lines.append(f"G00 Z{self.machine_profile.retract_z:.3f}")
 
     def _generate_retract(self):
         """Safe retract to clearance height."""
