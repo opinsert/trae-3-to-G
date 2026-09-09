@@ -4,6 +4,8 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 
 from app.core.parameter_extractor import (
+    ai_complete_missing_fields,
+    ai_complete_missing_fields_sync,
     draft_to_params,
     extract_parameters,
     merge_natural_language_draft,
@@ -42,6 +44,13 @@ async def precheck_natural_language(request: NaturalLanguagePrecheckRequest):
                 if field != "operations" and value not in (None, "", 0)
             },
         }
+        # 混合理解：脚本未识别的缺失字段（近义词/尺寸变体）交由 AI 定向补全。
+        # 无缺失或不满足 AI 配置时保持纯脚本结果（毫秒级路径不受影响）。
+        if ai_complete_missing_fields_sync(request.message, params):
+            ai_extra = await ai_complete_missing_fields(request.message, params)
+            if ai_extra:
+                params = merge_natural_language_draft(params, ai_extra)
+
         result = natural_language_precheck(params)
         revision = request.revision + 1
         draft = NaturalLanguageDraft.model_validate(result["draft"])
@@ -71,6 +80,10 @@ async def confirm_natural_language(request: NaturalLanguageConfirmRequest):
 
     actual_digest = natural_draft_digest(request.draft.model_dump())
     if actual_digest != request.digest:
+        logger.warning(
+            "confirm digest 不匹配: 请求digest=%s... 实算=%s... revision=%s 工步数=%s",
+            request.digest[:16], actual_digest[:16], request.revision, len(request.draft.operations or []),
+        )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="工序卡已发生变化，请重新检查后确认")
 
     try:

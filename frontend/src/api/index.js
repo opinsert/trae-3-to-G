@@ -27,10 +27,12 @@ export const drawingApi = {
   ocrExtract: (image) => api.post('/drawing/ocr-extract', { image })
 }
 
+// STL 请求含 AI 工艺规划，单次可能超过默认 60s，放宽到 300s
+const STL_TIMEOUT = 300000
 export const stlApi = {
-  convert: (stlFile, processCard, direction = '+Z') => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, generate_gcode: false, direction }),
-  generateGcode: (stlFile, processCard, operations, direction = '+Z') => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, operations, generate_gcode: true, direction }),
-  planDirections: (stlFile, processCard) => api.post('/stl/plan-directions', { stl_file: stlFile, process_card: processCard }),
+  convert: (stlFile, processCard, direction = '+Z') => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, generate_gcode: false, direction }, { timeout: STL_TIMEOUT }),
+  generateGcode: (stlFile, processCard, operations, direction = '+Z') => api.post('/stl/convert', { stl_file: stlFile, process_card: processCard, operations, generate_gcode: true, direction }, { timeout: STL_TIMEOUT }),
+  planDirections: (stlFile, processCard) => api.post('/stl/plan-directions', { stl_file: stlFile, process_card: processCard }, { timeout: STL_TIMEOUT }),
 }
 
 export const gcodeApi = {

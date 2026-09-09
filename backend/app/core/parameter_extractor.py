@@ -1,7 +1,10 @@
+import logging
 import re
 from typing import Optional
 
 from app.models.schemas import ProcessCard, ToolInfo, Operation
+
+logger = logging.getLogger(__name__)
 
 # 保持 drawing/STL 旧调用方的兼容性；自然语言流程使用下方的严格字段集合。
 REQUIRED_FIELDS = ['tool_diameter']
@@ -239,7 +242,7 @@ class ParameterExtractor:
         return result
 
     def _backfill_tool_from_operations(self, result: dict) -> None:
-        """顶层刀具字段缺失时，从首个工步的「N号x刀（d=…，l=…）」规格回填（单刀具流程）。"""
+        """顶层刀具字段缺失时，从首个工步的「N号x刀（d=…，l=…）」规格回填。"""
         if result['tool_name'] and result['tool_diameter'] and result['tool_length']:
             return
         for operation in result['operations']:
@@ -390,11 +393,7 @@ def natural_language_missing_labels(params: dict) -> list:
 
 def natural_language_value_errors(params: dict) -> list:
     errors = []
-    tool_name = str(params.get('tool_name') or '').strip()
     for operation in params.get('operations') or []:
-        equipment = str(operation.get('equipment') or '').strip()
-        if equipment and tool_name and tool_name not in equipment:
-            errors.append({'path': f"operations[{operation.get('sequence')}].equipment", 'label': '刀具/工艺装备', 'scope': 'operation', 'code': 'UNSUPPORTED_MULTI_TOOL', 'reason': '第一版自然语言流程只支持单刀具工序'})
         values = {key.upper(): float(value) for key, value in re.findall(r'([A-Z_]+)\s*=\s*([+-]?\d+(?:\.\d+)?)', operation.get('parameters', ''), re.I)}
         for key, value in values.items():
             if key in {'X', 'X_END', 'RAMP_X'} and not 0 <= value <= 200:
@@ -406,3 +405,117 @@ def natural_language_value_errors(params: dict) -> list:
             if key in {'STEP', 'PECK'} and value <= 0:
                 errors.append({'path': f"operations[{operation.get('sequence')}].parameters", 'label': key, 'scope': 'operation', 'code': 'INVALID_PARAMETER_VALUE', 'reason': f'{key}必须大于0'})
     return errors
+
+
+# ---------------------------------------------------------------------------
+# AI 定向补全：脚本无法理解近义词/尺寸变体表述时，仅对缺失字段求助模型
+# ---------------------------------------------------------------------------
+
+_AI_COMPLETION_SYSTEM_PROMPT = (
+    "你是 CNC 工序卡信息补全助手。用户文本中允许近义词/变体表达，例如："
+    "刀径/刃径→刀具直径，刀长→刀具长度，铣槽刀/键槽铣刀/棒铣刀→刀具名称，"
+    "转速/rpm→工步参数 S，进给量/进给速度/mm每分→工步参数 F，每刀切深→工步参数 Z。"
+    "只提取文本中明确表达的信息；禁止猜测、补默认值、自行设计工步或生成 G 代码。只输出 JSON。"
+)
+
+
+def ai_complete_missing_fields_sync(text: str, params: dict) -> dict:
+    """计算缺失清单（供调用方构造 prompt 与过滤 AI 结果）。"""
+    from app.utils.ai_gateway import is_ai_gateway_configured
+
+    if not is_ai_gateway_configured():
+        return {}
+    missing_labels = natural_language_missing_labels(params)
+    if not missing_labels:
+        return {}
+    # 顶层 operations 整体缺失不交给 AI：那要求设计工步，属用户职责；AI 只补可提取字段
+    top_level = [m["path"] for m in missing_labels if "[" not in m["path"] and m["path"] != "operations"]
+    operation_paths = [m["path"] for m in missing_labels if m["path"].startswith("operations[")]
+    if not top_level and not operation_paths:
+        return {}
+    return {
+        "missing_labels": missing_labels,
+        "top_level": top_level,
+        "operation_paths": operation_paths,
+    }
+
+
+async def ai_complete_missing_fields(text: str, params: dict) -> dict:
+    """AI 定向补全缺失字段（近义词/尺寸变体理解）。
+
+    仅返回缺失路径对应的值，结构与 extract 输出同构，可经 merge_natural_language_draft 合并。
+    AI 不可用或失败时返回 {}，调用方保留脚本提取结果（不影响主流程）。
+    """
+    from app.utils.ai_gateway import is_ai_gateway_configured, request_chat_completion_json
+
+    need = ai_complete_missing_fields_sync(text, params)
+    if not need:
+        return {}
+
+    label_lines = "\n".join(
+        f'- {m["label"]}（字段路径 {m["path"]}）' for m in need["missing_labels"]
+    )
+    prompt = (
+        "请理解下面这份机加工描述文本，把其中与缺失字段对应的信息提取出来。\n\n"
+        f"【文本】\n{text}\n\n"
+        f"【缺失字段清单】\n{label_lines}\n\n"
+        "输出 JSON 规则：\n"
+        "1. 顶层字段直接给值，键名严格用清单里的字段路径；数值去掉单位（8mm→8）；\n"
+        "2. 工步字段输出为 operations 数组，每项含 sequence（工步号）与要补的子字段键值；\n"
+        "3. 文本中确实没有的信息不要输出该键；不要编造。"
+    )
+    try:
+        result = await request_chat_completion_json(
+            [
+                {"role": "system", "content": _AI_COMPLETION_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            timeout=60,  # 思考型模型单次响应可能超过 30s
+        )
+    except Exception as exc:  # noqa: BLE001 - AI 补全是增强项，失败不影响主流程
+        logger.warning("AI 缺失字段补全失败(%s)，保留脚本提取结果", type(exc).__name__)
+        return {}
+
+    if not isinstance(result, dict):
+        return {}
+
+    top_level_keys = set(need["top_level"])
+    # 顶层字段：过滤只保留缺失项，数值字段转 float
+    filtered = {
+        key: value
+        for key, value in result.items()
+        if key in top_level_keys and value not in (None, "", 0, [])
+    }
+    for key in ("tool_length", "tool_diameter"):
+        if key in filtered:
+            try:
+                filtered[key] = float(filtered[key])
+            except (ValueError, TypeError):
+                filtered.pop(key, None)
+
+    # 工步字段：按 sequence 归并缺失子字段
+    wanted = {}
+    for path in need["operation_paths"]:
+        match = re.match(r"operations\[(\d+)\]\.(.+)", path)
+        if match:
+            wanted.setdefault(int(match.group(1)), set()).add(match.group(2))
+    op_updates = []
+    for item in result.get("operations") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            sequence = int(item.get("sequence"))
+        except (ValueError, TypeError):
+            continue
+        fields = wanted.get(sequence)
+        if not fields:
+            continue
+        op_updates.append({
+            "sequence": sequence,
+            **{key: item[key] for key in fields if item.get(key) not in (None, "", 0)},
+        })
+
+    merged = {**filtered}
+    if op_updates:
+        merged["operations"] = op_updates
+    return merged
