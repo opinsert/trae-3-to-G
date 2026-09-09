@@ -244,3 +244,18 @@ class TestGenerateGcodeFunction:
         gcode = generate_gcode(card, ops)
         assert "G81" in gcode
         assert "M30" in gcode
+
+
+def test_deburring_is_supported_chamfer_type_with_x_y_r():
+    """去毛刺工步应按倒角类型处理：需求 X/Y/R；齐备后不再报'支持的工序类型'。"""
+    from app.core.gcode_generator import missing_operation_parameters, required_operation_parameters
+    from app.models.schemas import Operation
+
+    assert required_operation_parameters("去毛刺") == ("X", "Y", "R")
+
+    bare = [Operation(sequence=3, content="去毛刺", parameters="", equipment="", remark="")]
+    missing = missing_operation_parameters(bare)
+    assert missing == ["工序3: X", "工序3: Y", "工序3: R"]
+
+    complete = [Operation(sequence=3, content="去毛刺", parameters="X=30, Y=21, R=0.2, F=200", equipment="", remark="")]
+    assert missing_operation_parameters(complete) == []

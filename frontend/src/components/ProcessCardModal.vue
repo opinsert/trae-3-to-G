@@ -1,7 +1,7 @@
 <template>
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden">
-      <div class="flex items-center justify-between px-6 py-4 border-b bg-green-50">
+    <div class="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b bg-green-50 shrink-0">
         <div>
           <h2 class="text-xl font-bold text-green-800">请确认工序卡</h2>
           <p class="text-xs text-green-700 mt-1">确认前不会生成 G 代码；确认后仍需人工审核、仿真、空运行和试切。</p>
@@ -9,7 +9,16 @@
         <button @click="back" class="text-gray-500 hover:text-gray-700">返回补充</button>
       </div>
 
-      <div class="overflow-auto p-6 max-h-[72vh]">
+      <div v-if="errors.length" class="px-6 py-3 bg-red-50 border-b border-red-200 shrink-0">
+        <p class="text-sm font-medium text-red-800 mb-1">无法生成 G 代码，请先解决以下问题：</p>
+        <ul class="space-y-1">
+          <li v-for="(error, index) in errors" :key="index" class="text-sm text-red-700">
+            - {{ error.label || error.path }}：{{ error.reason || error }}
+          </li>
+        </ul>
+      </div>
+
+      <div class="overflow-y-auto p-6 flex-1 min-h-0">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-6">
           <div v-for="field in cardFields" :key="field.key" class="p-3 bg-gray-50 rounded-lg">
             <p class="text-gray-500">{{ field.label }}</p>
@@ -27,7 +36,7 @@
           </div>
         </div>
 
-        <div>
+        <div class="overflow-x-auto">
           <h4 class="font-semibold text-gray-700 mb-3">操作步骤</h4>
           <table class="w-full text-sm border-collapse">
             <thead>
@@ -55,7 +64,7 @@
         </div>
       </div>
 
-      <div class="p-4 border-t bg-gray-50 flex gap-4">
+      <div class="p-4 border-t bg-gray-50 flex gap-4 shrink-0">
         <button @click="back" class="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">返回补充</button>
         <button @click="confirm" :disabled="confirming" class="flex-1 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
           {{ confirming ? '生成中...' : '确认并生成 G 代码' }}
@@ -70,7 +79,9 @@ defineProps({
   processCard: { type: Object, required: true },
   operations: { type: Array, default: () => [] },
   fieldSources: { type: Object, default: () => ({}) },
-  confirming: { type: Boolean, default: false }
+  confirming: { type: Boolean, default: false },
+  // 生成失败的阻塞原因（code/label/reason 数组或字符串）
+  errors: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['close', 'back', 'confirm'])

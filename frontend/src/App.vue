@@ -41,17 +41,18 @@
         v-if="currentTab === 'stl'"
         @convert="handleConvert"
       />
-      <InlineGCodeViewer
-        v-if="convertedData?.gcode && currentTab !== 'stl'"
-        :gcode="convertedData.gcode"
-        :validation="convertedData.validation"
-      />
+      <div v-if="convertedData?.gcode && currentTab !== 'stl'" ref="gcodeArea">
+        <InlineGCodeViewer
+          :gcode="convertedData.gcode"
+          :validation="convertedData.validation"
+        />
+      </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import NaturalLanguageInput from './components/NaturalLanguageInput.vue'
 import DrawingUpload from './components/DrawingUpload.vue'
 import StlUpload from './components/StlUpload.vue'
@@ -65,6 +66,7 @@ const tabs = [
 
 const currentTab = ref('natural')
 const convertedData = ref(null)
+const gcodeArea = ref(null)
 
 const switchTab = (tabId) => {
   currentTab.value = tabId
@@ -74,6 +76,9 @@ const switchTab = (tabId) => {
 const handleConvert = (data) => {
   if (data) {
     convertedData.value = data
+    nextTick(() => {
+      gcodeArea.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   } else {
     alert('转换失败：没有收到数据')
   }

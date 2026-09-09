@@ -70,6 +70,7 @@
       :operations="draft.operations"
       :field-sources="draft.field_sources"
       :confirming="confirming"
+      :errors="confirmErrors"
       @close="returnToInput"
       @back="returnToInput"
       @confirm="confirmDraft"
@@ -98,8 +99,10 @@ const placeholderText = `例如：
 工步1 粗铣键槽，刀具：键槽铣刀，X=0, Y=0, Z=2, F=200，工艺说明：每层切深2mm`
 
 const inputText = ref('')
+const lastSubmittedText = ref('')  // 最近一次提交原文：返回补充时恢复，便于修改
 const loading = ref(false)
 const confirming = ref(false)
+const confirmErrors = ref([])
 const statusMessage = ref('')
 const errorMessage = ref('')
 const filledFields = ref([])
@@ -120,6 +123,7 @@ const submitDraft = async () => {
   errorMessage.value = ''
   statusMessage.value = ''
   showConfirmation.value = false
+  confirmErrors.value = []
   try {
     const response = await naturalLanguageApi.precheck(inputText.value, draft.value, revision.value, digest.value)
     const data = response.data
@@ -129,6 +133,7 @@ const submitDraft = async () => {
     filledFields.value = data.filled_fields || []
     missingFields.value = data.missing_fields || []
     statusMessage.value = data.message || ''
+    lastSubmittedText.value = inputText.value  // 先留存原文，清空后返回补充仍可恢复
     inputText.value = ''
     if (data.status === 'ready_for_confirmation') showConfirmation.value = true
   } catch (error) {
@@ -142,17 +147,26 @@ const confirmDraft = async () => {
   if (!draft.value || confirming.value) return
   confirming.value = true
   errorMessage.value = ''
+  confirmErrors.value = []
   try {
     const response = await naturalLanguageApi.confirm(draft.value, revision.value, digest.value)
     if (response.data.success && response.data.data) {
       showConfirmation.value = false
       emit('convert', response.data.data)
-      statusMessage.value = 'G代码已生成，请完成规则审核和人工上机前检查。'
+      statusMessage.value = 'G代码已生成，已显示在下方，请完成规则审核和人工上机前检查。'
     } else {
+      confirmErrors.value = response.data.errors || []
       errorMessage.value = response.data.message || 'G代码未生成'
     }
   } catch (error) {
-    errorMessage.value = error.response?.data?.detail || '确认生成失败，请重新检查工序卡'
+    // HTTP 层错误(409/500 等)同样要在弹窗内可见，而非只写被遮住的页面层
+    const detail = (typeof error.response?.data?.detail === 'object'
+      ? error.response.data.detail.message
+      : error.response?.data?.detail) || '确认生成失败，请重新检查工序卡'
+    errorMessage.value = detail
+    if (showConfirmation.value) {
+      confirmErrors.value = [{ label: '生成失败', reason: detail }]
+    }
   } finally {
     confirming.value = false
   }
@@ -160,6 +174,9 @@ const confirmDraft = async () => {
 
 const returnToInput = () => {
   showConfirmation.value = false
+  confirmErrors.value = []
+  // 恢复最近一次提交的原文，避免用户先前输入的内容丢失
+  if (lastSubmittedText.value) inputText.value = lastSubmittedText.value
   statusMessage.value = '请补充或修改信息后重新提交。'
 }
 
@@ -178,5 +195,7 @@ const handleClear = () => {
   statusMessage.value = ''
   errorMessage.value = ''
   showConfirmation.value = false
+  confirmErrors.value = []
+  lastSubmittedText.value = ''
 }
 </script>

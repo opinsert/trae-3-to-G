@@ -19,8 +19,22 @@ from app.models.schemas import ConvertData, ConvertResponse, MachineProfile, Pro
 DEFAULT_MACHINE_PROFILE = MachineProfile()
 
 
+def _canonicalize_numbers(value):
+    """数字规范化：float 整值转 int，避免 50.0(后端) 与 50(浏览器 JSON) 造成 digest 漂移。"""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _canonicalize_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_canonicalize_numbers(item) for item in value]
+    return value
+
+
 def natural_draft_digest(draft: dict) -> str:
-    payload = json.dumps(draft, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(
+        _canonicalize_numbers(draft),
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
     return sha256(payload.encode("utf-8")).hexdigest()
 
 

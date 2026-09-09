@@ -48,7 +48,7 @@ _OPERATION_REQUIREMENTS = [
     (("轮廓", "外形"), ("X", "Y", "WIDTH", "HEIGHT", "Z")),
     (("深孔",), ("X", "Y", "Z")),
     (("钻孔", "打孔", "攻丝", "攻牙", "铰孔", "铰刀", "镗孔", "镗削"), ("X", "Y", "Z")),
-    (("倒角",), ("X", "Y", "R")),
+    (("倒角", "去毛刺"), ("X", "Y", "R")),
     (("螺纹",), ("X", "Y", "D", "Z", "P")),
     (("往复", "来回"), ("X", "Y", "WIDTH", "HEIGHT", "Z")),
     (("圆孔", "圆"), ("X", "Y", "D", "Z")),
@@ -171,7 +171,7 @@ class GCodeGenerator:
             self._generate_reaming(op)
         elif "镗孔" in content or "镗削" in content:
             self._generate_boring(op)
-        elif "倒角" in content:
+        elif "倒角" in content or "去毛刺" in content:
             self._generate_chamfering(op)
         elif "螺纹" in content:
             self._generate_thread_milling(op)
