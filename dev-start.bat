@@ -1,5 +1,5 @@
 @echo off
-rem One-click start: backend API (:8000) + frontend web (:5173)
+rem One-click start: backend API (:8000) + frontend web (:5175)
 cd /d "%~dp0"
 
 if not exist "backend\app\main.py" (
@@ -13,14 +13,14 @@ start "GCode-Backend-8000" cmd /k "call dev-backend.bat"
 
 timeout /t 1 /nobreak >nul
 
-echo Starting frontend web -> http://localhost:5173
-start "GCode-Frontend-5173" cmd /k "call dev-frontend.bat"
+echo Starting frontend web -> http://localhost:5175
+start "GCode-Frontend-5175" cmd /k "call dev-frontend.bat"
 
 echo.
 echo ============================================================
 echo  Services are starting, please wait a few seconds.
 echo.
-echo  Frontend (open in browser):  http://localhost:5173
+echo  Frontend (open in browser):  http://localhost:5175
 echo  Backend  API docs:           http://localhost:8000/docs
 echo.
 echo  Copy the frontend address into your browser. Keep the two
